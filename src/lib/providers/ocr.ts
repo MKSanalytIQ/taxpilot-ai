@@ -45,8 +45,14 @@ function pagesFromPdf(payload: VisionPayload): PdfPage[] {
 export class UnconfiguredOcrProvider implements DocumentExtractionProvider {
   name = "unconfigured";
   configured = false;
+  #message: string;
+
+  constructor(message = "OCR is not configured. Enter values manually.") {
+    this.#message = message;
+  }
+
   async extractText(): Promise<OcrTextResult> {
-    return { pages: [], error: "OCR_PROVIDER is not configured" };
+    return { pages: [], error: this.#message };
   }
   async extract(): Promise<ExtractionCandidate[]> {
     return [];
@@ -122,10 +128,11 @@ const GOOGLE_VISION = new Set(["google", "google-vision", "vision"]);
 
 export function getOcrProvider(): DocumentExtractionProvider {
   const name = (process.env.OCR_PROVIDER || "").trim().toLowerCase();
-  if (!name || name === "off" || name === "none") return new UnconfiguredOcrProvider();
-  if (!GOOGLE_VISION.has(name)) return new UnconfiguredOcrProvider();
+  if (!name || name === "off" || name === "none" || !GOOGLE_VISION.has(name)) {
+    return new UnconfiguredOcrProvider("OCR is not configured. Enter values manually.");
+  }
   const apiKey = (process.env.GOOGLE_VISION_API_KEY || "").trim();
-  if (!apiKey) return new UnconfiguredOcrProvider();
+  if (!apiKey) return new UnconfiguredOcrProvider("Google Vision OCR is not configured. Enter values manually.");
   return new GoogleVisionOcrProvider(apiKey);
 }
 

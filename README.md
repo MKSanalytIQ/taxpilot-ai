@@ -14,7 +14,7 @@ Signup → dashboard → create return → eligibility (deterministic) → inter
 
 ITR-3 has data models and screens (P&L / balance sheet tables) but not a complete official mapper.
 
-Document OCR, payments, and live AI providers are **interfaces with development adapters**. They do not fake results.
+Document OCR uses Google Vision when `OCR_PROVIDER` and `GOOGLE_VISION_API_KEY` are set. Unconfigured OCR does not invent values. Payments verify Razorpay checkout and webhook signatures. Production documents use a private S3-compatible bucket.
 
 ## Tax rules (AY 2026–27)
 
@@ -69,8 +69,10 @@ npm run build
 |---|---|
 | `DATABASE_URL` | PostgreSQL |
 | `AUTH_SECRET` | Session JWT |
-| `S3_*` | Unused until object storage is wired |
-| `AI_PROVIDER` / `OCR_PROVIDER` / `PAYMENT_PROVIDER` | Reserved; current adapters are local/unconfigured |
+| `S3_BUCKET`, `S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_REGION` | Private object storage. Required in production. |
+| `OCR_PROVIDER`, `GOOGLE_VISION_API_KEY` | Server-side OCR for scanned PDF and images. |
+| `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`, `PRO_PRICE_INR` | Pro checkout and webhook. |
+| `RESEND_API_KEY`, `RESET_EMAIL_FROM` or `EMAIL_FROM`, `NEXT_PUBLIC_APP_URL` | Password reset email. |
 
 ## Architecture
 
@@ -95,15 +97,14 @@ Golden files: `tests/fixtures/itr4/ay2026_27/*.json`
 
 ## Production database
 
-Local: SQLite (`DATABASE_URL=file:./prisma/dev.db`).  
-Production: PostgreSQL. Change `provider` in `prisma/schema.prisma` to `postgresql`, set `DATABASE_URL`, run `docker compose up -d` and `npx prisma migrate deploy`. Models use portable types only.
+Local and production use PostgreSQL (`DATABASE_URL`). Locally, run `npm run db:up`.
 
 ## Known limitations
 
 - Official CBDT *business* validation rules PDF is referenced, not executed as a rules engine (JSON Schema + our deterministic rules are applied).
 - 44AE vehicles UI is partial.
-- ITR-3 JSON is disabled.
-- Document OCR is unconfigured; extracted values never auto-file.
+- ITR-3 and ITR-4 JSON are generated from the official schemas after validation.
+- Without `GOOGLE_VISION_API_KEY`, scanned files stay in manual review and are not auto-filed.
 - No portal filing.
 
 ## Next phase

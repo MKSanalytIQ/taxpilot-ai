@@ -86,9 +86,10 @@ export async function runExtraction(
   const needsText = mime.startsWith("image/") || (mime === "application/pdf" && pages.every((p) => !p.text));
   if (needsText && !text.trim()) {
     if (!ocr.configured) {
+      const probe = await ocr.extractText({ fileName: input.fileName, mimeType: mime, bytes: input.bytes });
       return emptyResult(kind, pages, {
         errorCode: "MANUAL_REVIEW_REQUIRED",
-        errorMessage: "Image/scanned OCR is not configured. Enter values manually.",
+        errorMessage: publicOcrMessage(probe.error),
       });
     }
     let ocrText: Awaited<ReturnType<DocumentExtractionProvider["extractText"]>>;

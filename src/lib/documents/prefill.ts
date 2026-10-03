@@ -389,6 +389,7 @@ export function uploadErrorMessage(code?: string | null) {
   if (key === "invalid_type") return "This file type is not supported. Use PDF, JPEG, PNG, CSV, TXT, or XLSX.";
   if (key === "empty") return "This file is empty and cannot be processed.";
   if (key === "oversize") return "This file is too large. Maximum size is 12 MB.";
+  if (key === "storage") return "Document storage is not configured. The file was not saved.";
   return "Upload was rejected. Check the file and try again.";
 }
 

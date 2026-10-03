@@ -4,7 +4,10 @@ export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const session = request.cookies.get("tp_session")?.value;
   const needsAuth = pathname.startsWith("/dashboard") || pathname.startsWith("/returns") || pathname.startsWith("/admin") || pathname.startsWith("/api/");
-  const publicApi = pathname.startsWith("/api/health") || pathname.startsWith("/api/auth/google");
+  const publicApi =
+    pathname.startsWith("/api/health") ||
+    pathname.startsWith("/api/auth/google") ||
+    pathname === "/api/payment/webhook";
   if (needsAuth && !publicApi && !session) {
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

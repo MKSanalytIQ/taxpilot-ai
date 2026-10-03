@@ -539,7 +539,11 @@ export async function uploadDocumentAction(formData: FormData) {
   });
   if (dup && !force) redirect(`/returns/${id}/documents/${dup.id}?duplicate=1`);
   const key = newStorageKey(session.userId, file.name);
-  await getStorage().put(key, bytes, mime);
+  try {
+    await getStorage().put(key, bytes, mime);
+  } catch {
+    redirect(`/returns/${id}/documents?error=storage`);
+  }
   const declared = String(formData.get("kind") || "OTHER");
   const kind = (DOCUMENT_TYPES as readonly string[]).includes(declared) ? declared : "OTHER";
   const doc = await prisma.document.create({

@@ -11,7 +11,12 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   const doc = await prisma.document.findUnique({ where: { id } });
   if (!doc || doc.deletedAt) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (!canAccessDocument(doc.userId, session)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  const bytes = await getStorage().get(doc.storageKey);
+  let bytes: Buffer;
+  try {
+    bytes = await getStorage().get(doc.storageKey);
+  } catch {
+    return NextResponse.json({ error: "Document storage is unavailable." }, { status: 503 });
+  }
   const filename = doc.fileName.replace(/[^\w.\- ]+/g, "_").slice(0, 120) || "document";
   return new NextResponse(new Uint8Array(bytes), {
     headers: {

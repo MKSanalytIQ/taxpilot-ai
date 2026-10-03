@@ -274,3 +274,134 @@ export function prismaPaymentStore(prisma: {
     },
   };
 }
+
+export const PAYMENT_STATUS_FAILED = "FAILED";
+export const PAYMENT_STATUS_REFUNDED = "REFUNDED";
+
+export type RazorpayWebhookDecision =
+  | { action: "ignore" }
+  | { action: "paid"; orderId: string; amount: number | null }
+  | { action: "failed"; orderId: string }
+  | { action: "refunded"; orderId: string };
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object") return null;
+  return value as Record<string, unknown>;
+}
+
+function webhookEntity(body: Record<string, unknown>, name: string) {
+  const payload = asRecord(body.payload);
+  const node = asRecord(payload?.[name]);
+  return asRecord(node?.entity);
+}
+
+export function verifyRazorpayWebhookSignature(body: string, signature: string, secret?: string) {
+  const key = secret ?? String(process.env.RAZORPAY_WEBHOOK_SECRET || "");
+  if (!key || !body || !signature) return false;
+  const expected = createHmac("sha256", key).update(body).digest("hex");
+  const a = Buffer.from(expected);
+  const b = Buffer.from(String(signature));
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
+
+export function parseRazorpayWebhook(body: string): RazorpayWebhookDecision | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return null;
+  }
+  const root = asRecord(parsed);
+  if (!root) return null;
+  const event = String(root.event || "");
+  const payment = webhookEntity(root, "payment");
+  const order = webhookEntity(root, "order");
+  const orderId = String(payment?.order_id || order?.id || "").trim();
+  const amount = typeof payment?.amount === "number" ? payment.amount : null;
+  if (event === "payment.captured" || event === "order.paid") {
+    if (!orderId) return null;
+    return { action: "paid", orderId, amount };
+  }
+  if (event === "payment.failed") {
+    if (!orderId) return null;
+    return { action: "failed", orderId };
+  }
+  if (event === "refund.processed" || event === "payment.refunded") {
+    if (!orderId) return null;
+    return { action: "refunded", orderId };
+  }
+  return { action: "ignore" };
+}
+
+export type WebhookStore = {
+  findByOrderId(orderId: string): Promise<PaymentRecord | null>;
+  completePaidPro(paymentId: string, userId: string): Promise<void>;
+  markStatus(id: string, status: string): Promise<void>;
+  hasOtherPaid(userId: string, exceptPaymentId: string): Promise<boolean>;
+  deactivatePro(userId: string): Promise<void>;
+};
+
+/** Idempotent. A repeated event does not create another payment or re-upgrade a refund. */
+export async function applyRazorpayWebhook(store: WebhookStore, decision: Exclude<RazorpayWebhookDecision, { action: "ignore" }>) {
+  const payment = await store.findByOrderId(decision.orderId);
+  if (!payment || payment.provider !== PAYMENT_PROVIDER) return;
+  if (decision.action === "paid") {
+    if (payment.status === PAYMENT_STATUS_PAID || payment.status === PAYMENT_STATUS_REFUNDED) return;
+    if (decision.amount == null || decision.amount !== payment.amount) return;
+    await store.completePaidPro(payment.id, payment.userId);
+    return;
+  }
+  if (decision.action === "failed") {
+    if (payment.status !== PAYMENT_STATUS_CREATED) return;
+    await store.markStatus(payment.id, PAYMENT_STATUS_FAILED);
+    return;
+  }
+  if (payment.status === PAYMENT_STATUS_REFUNDED) return;
+  await store.markStatus(payment.id, PAYMENT_STATUS_REFUNDED);
+  if (!(await store.hasOtherPaid(payment.userId, payment.id))) await store.deactivatePro(payment.userId);
+}
+
+export function prismaWebhookStore(prisma: {
+  payment: {
+    findFirst: (args: { where: { provider: string; providerRef: string } }) => Promise<PaymentRecord | null>;
+    findMany: (args: { where: { userId: string; status: string; id: { not: string } }; select: { id: true } }) => Promise<{ id: string }[]>;
+    update: (args: { where: { id: string }; data: { status: string } }) => Promise<PaymentRecord>;
+  };
+  subscription: {
+    upsert: (args: {
+      where: { userId: string };
+      create: { userId: string; plan: string; status: string; billingProvider: string };
+      update: { plan: string; status: string; billingProvider: string };
+    }) => Promise<unknown>;
+  };
+}): WebhookStore {
+  return {
+    findByOrderId: (orderId) => prisma.payment.findFirst({ where: { provider: PAYMENT_PROVIDER, providerRef: orderId } }),
+    completePaidPro: async (paymentId, userId) => {
+      await prisma.payment.update({ where: { id: paymentId }, data: { status: PAYMENT_STATUS_PAID } });
+      await prisma.subscription.upsert({
+        where: { userId },
+        create: { userId, plan: PLAN_PRO, status: "ACTIVE", billingProvider: PAYMENT_PROVIDER },
+        update: { plan: PLAN_PRO, status: "ACTIVE", billingProvider: PAYMENT_PROVIDER },
+      });
+    },
+    markStatus: async (id, status) => {
+      await prisma.payment.update({ where: { id }, data: { status } });
+    },
+    hasOtherPaid: async (userId, exceptPaymentId) => {
+      const rows = await prisma.payment.findMany({
+        where: { userId, status: PAYMENT_STATUS_PAID, id: { not: exceptPaymentId } },
+        select: { id: true },
+      });
+      return rows.length > 0;
+    },
+    deactivatePro: async (userId) => {
+      await prisma.subscription.upsert({
+        where: { userId },
+        create: { userId, plan: "FREE", status: "ACTIVE", billingProvider: "NONE" },
+        update: { plan: "FREE", status: "ACTIVE", billingProvider: "NONE" },
+      });
+    },
+  };
+}

@@ -14,7 +14,7 @@ afterEach(() => {
 });
 
 describe("getOcrProvider", () => {
-  it("stays unconfigured when OCR is off, unknown, or missing a key", () => {
+  it("stays unconfigured when OCR is off, unknown, or missing a key", async () => {
     process.env.OCR_PROVIDER = "off";
     process.env.GOOGLE_VISION_API_KEY = "present";
     expect(getOcrProvider().name).toBe("unconfigured");
@@ -22,7 +22,12 @@ describe("getOcrProvider", () => {
 
     process.env.OCR_PROVIDER = "google";
     process.env.GOOGLE_VISION_API_KEY = "";
-    expect(getOcrProvider().configured).toBe(false);
+    const missing = getOcrProvider();
+    expect(missing.configured).toBe(false);
+    expect(await missing.extractText({ fileName: "scan.png", mimeType: "image/png", bytes: Buffer.from("x") })).toEqual({
+      pages: [],
+      error: "Google Vision OCR is not configured. Enter values manually.",
+    });
 
     process.env.OCR_PROVIDER = "not-a-provider";
     process.env.GOOGLE_VISION_API_KEY = "present";

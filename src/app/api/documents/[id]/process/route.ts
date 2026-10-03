@@ -14,7 +14,12 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   if (!doc.returnId) return NextResponse.json({ error: "no-return" }, { status: 400 });
-  const bytes = await getStorage().get(doc.storageKey);
+  let bytes: Buffer;
+  try {
+    bytes = await getStorage().get(doc.storageKey);
+  } catch {
+    return NextResponse.json({ error: "Document storage is unavailable." }, { status: 503 });
+  }
   const result = await persistExtraction({
     documentId: doc.id,
     returnId: doc.returnId,
