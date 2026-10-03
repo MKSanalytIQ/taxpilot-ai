@@ -31,14 +31,14 @@ export default async function Pricing({
   const session = await getSession();
   const access = session ? await getUserAccess(session.userId) : null;
   const priceLabel = displayProPriceLabel();
-  const success = paid === "1" || access?.isPro;
+  const success = Boolean(access?.isPro);
 
   return (
     <div>
       <SiteHeader authed={Boolean(session)} name={session?.name} admin={session?.role === "ADMIN"} />
       <div className="mx-auto max-w-5xl px-6 py-16">
         <h1 className="text-4xl">Pricing</h1>
-        {paid === "1" ? (
+        {paid === "1" && access?.isPro ? (
           <Card className="mt-6">
             <p className="font-medium">{PAYMENT_SUCCESS_HEADING}</p>
             <p className="sans mt-2 text-sm text-[#5c6773]">{PAYMENT_SUCCESS_DETAIL}</p>
