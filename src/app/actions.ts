@@ -17,6 +17,7 @@ import { classifyEdit, parsePreparation, resetToImported } from "@/lib/documents
 import { applyConflictResolution, rebuildDocumentConflicts } from "@/lib/documents/conflicts";
 import { DOCUMENT_TYPES } from "@/lib/documents/types";
 import { canAccessConflict, canAccessTaxFact } from "@/lib/authz";
+import { reviewFactStatus } from "@/lib/documents/mapping";
 import { parseAmount } from "@/lib/documents/rupees";
 import { mkdir, writeFile } from "fs/promises";
 import path from "path";
@@ -573,6 +574,7 @@ export async function reviewExtractionAction(formData: FormData) {
   if (!session) return;
   const extractionId = String(formData.get("extractionId") || "");
   const decision = String(formData.get("decision") || "");
+  if (decision !== "confirm" && decision !== "reject" && decision !== "edit") return;
   const row = await prisma.documentExtraction.findUnique({ where: { id: extractionId }, include: { document: true } });
   if (!row || !canAccessTaxFact(row.document.userId, session)) return;
   const fact = await prisma.taxFact.findFirst({
@@ -586,12 +588,13 @@ export async function reviewExtractionAction(formData: FormData) {
   const edited = String(formData.get("edited") || "").trim();
   const nextValue = edited || row.extractedValue;
   const numeric = parseAmount(nextValue);
+  const reviewed = reviewFactStatus(decision);
   await prisma.documentExtraction.update({
     where: { id: extractionId },
     data: {
-      status: decision === "reject" ? "REJECTED" : "CONFIRMED",
-      confirmed: decision !== "reject",
-      confirmedAt: decision === "reject" ? null : new Date(),
+      status: decision === "reject" ? "REJECTED" : decision === "confirm" ? "CONFIRMED" : "EXTRACTED",
+      confirmed: decision === "confirm",
+      confirmedAt: decision === "confirm" ? new Date() : decision === "reject" ? null : row.confirmedAt,
       originalValue: row.originalValue || row.extractedValue,
       editedValue: edited && edited !== row.extractedValue ? edited : row.editedValue,
       editedBy: edited && edited !== row.extractedValue ? session.userId : row.editedBy,
@@ -601,14 +604,13 @@ export async function reviewExtractionAction(formData: FormData) {
     },
   });
   if (fact) {
-    const verified = decision !== "reject";
     await prisma.taxFact.update({
       where: { id: fact.id },
       data: {
-        verified,
-        verifiedBy: verified ? session.userId : "",
-        verifiedAt: verified ? new Date() : null,
-        status: decision === "reject" ? "REJECTED" : "VERIFIED",
+        verified: reviewed.verified,
+        verifiedBy: reviewed.verified ? session.userId : "",
+        verifiedAt: reviewed.verified ? new Date() : null,
+        status: reviewed.status,
         value: nextValue,
         numericValue: numeric ?? fact.numericValue,
         originalValue: fact.originalValue || fact.value,

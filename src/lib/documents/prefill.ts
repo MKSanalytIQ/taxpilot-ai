@@ -133,17 +133,19 @@ export function shouldOverwriteFromVerified(entry: PrefillEntry | undefined) {
   return entry.origin === "IMPORTED";
 }
 
-function factAt(facts: AuthoritativeFact[], path: string) {
-  return facts.find((f) => f.normalizedTaxField === path);
+function factForPath(facts: AuthoritativeFact[], path: string) {
+  const group = conflictGroup(path);
+  if (group && GROUP_TO_TAX_FIELD[group] === path) {
+    const grouped = facts.filter((fact) => conflictGroup(fact.normalizedTaxField) === group);
+    const amounts = new Set(grouped.map((fact) => fact.numericValue));
+    if (amounts.size > 1) return undefined;
+    return grouped[0] || facts.find((fact) => fact.normalizedTaxField === path);
+  }
+  return facts.find((fact) => fact.normalizedTaxField === path);
 }
 
-/** Reuse existing conflict-group mapping so AIS TDS/salary aliases reach the canonical field. */
-function factForPath(facts: AuthoritativeFact[], path: string) {
-  const direct = factAt(facts, path);
-  if (direct) return direct;
-  const group = conflictGroup(path);
-  if (!group || GROUP_TO_TAX_FIELD[group] !== path) return undefined;
-  return facts.find((f) => conflictGroup(f.normalizedTaxField) === group);
+function heldByUser(entry: PrefillEntry | undefined) {
+  return entry?.origin === "USER_EDITED" || entry?.origin === "USER_INPUT";
 }
 
 function pickNum(
@@ -155,10 +157,12 @@ function pickNum(
   manuals: Map<string, number>,
 ) {
   const group = conflictGroup(path);
-  if (group && openGroups.has(group)) return existing;
+  if (group && openGroups.has(group)) return heldByUser(prep.fields[path]) ? existing : 0;
+  if (heldByUser(prep.fields[path])) return existing;
   if (!shouldOverwriteFromVerified(prep.fields[path])) return existing;
   if (group && manuals.has(group)) return manuals.get(group)!;
   if (imported != null) return imported;
+  if (prep.fields[path]?.origin === "IMPORTED") return 0;
   return existing;
 }
 
@@ -170,10 +174,20 @@ function pickStr(
   openGroups: Set<string>,
 ) {
   const group = conflictGroup(path);
-  if (group && openGroups.has(group)) return existing;
+  if (group && openGroups.has(group)) return heldByUser(prep.fields[path]) ? existing : "";
+  if (heldByUser(prep.fields[path])) return existing;
   if (!shouldOverwriteFromVerified(prep.fields[path])) return existing;
   if (imported) return imported;
+  if (prep.fields[path]?.origin === "IMPORTED") return "";
   return existing;
+}
+
+function releaseStaleImport(next: PreparationState, path: string, facts: AuthoritativeFact[], openGroups: Set<string>, manuals: Map<string, number>) {
+  const entry = next.fields[path];
+  if (!entry || entry.origin !== "IMPORTED") return;
+  const group = conflictGroup(path);
+  if (group && manuals.has(group)) return;
+  if ((group && openGroups.has(group)) || !factForPath(facts, path)) delete next.fields[path];
 }
 
 function stampImported(next: PreparationState, facts: AuthoritativeFact[], path: string, value: string | number | null | undefined) {
@@ -215,15 +229,11 @@ export function applyVerifiedFactsToState(input: {
     exemptions: pickNum(next, "salary.exemptions", factForPath(facts, "salary.exemptions")?.numericValue, salaryExisting?.exemptions ?? 0, input.openGroups, manuals),
     standardDeduction: pickNum(next, "salary.standardDeduction", factForPath(facts, "salary.standardDeduction")?.numericValue, salaryExisting?.standardDeduction ?? 0, input.openGroups, manuals),
   };
-  const salaryMeaningful =
-    Boolean(salaryExisting) ||
-    salary.grossSalary ||
-    salary.tds ||
-    salary.employerName ||
-    salary.employerTan ||
-    salary.exemptions ||
-    salary.standardDeduction;
-
+  const interestAmount = pickNum(next, "income.interest", factForPath(facts, "income.interest")?.numericValue, input.existingInterest?.amount ?? 0, input.openGroups, manuals);
+  const dividendAmount = pickNum(next, "income.dividend", factForPath(facts, "income.dividend")?.numericValue, input.existingDividend?.amount ?? 0, input.openGroups, manuals);
+  for (const path of ["salary.grossSalary", "salary.tds", "salary.employerName", "salary.employerTan", "salary.exemptions", "salary.standardDeduction", "income.interest", "income.dividend"]) {
+    releaseStaleImport(next, path, facts, input.openGroups, manuals);
+  }
   stampImported(next, facts, "salary.grossSalary", salary.grossSalary || null);
   stampImported(next, facts, "salary.tds", salary.tds || null);
   stampImported(next, facts, "salary.employerName", salary.employerName || null);
@@ -231,8 +241,6 @@ export function applyVerifiedFactsToState(input: {
   stampImported(next, facts, "salary.exemptions", salary.exemptions || null);
   stampImported(next, facts, "salary.standardDeduction", salary.standardDeduction || null);
 
-  const interestAmount = pickNum(next, "income.interest", factForPath(facts, "income.interest")?.numericValue, input.existingInterest?.amount ?? 0, input.openGroups, manuals);
-  const dividendAmount = pickNum(next, "income.dividend", factForPath(facts, "income.dividend")?.numericValue, input.existingDividend?.amount ?? 0, input.openGroups, manuals);
   stampImported(next, facts, "income.interest", interestAmount || null);
   stampImported(next, facts, "income.dividend", dividendAmount || null);
 
@@ -269,7 +277,7 @@ export function applyVerifiedFactsToState(input: {
 
   return {
     prep: next,
-    salary: salaryMeaningful ? salary : null,
+    salary: (Boolean(salaryExisting) || salary.grossSalary || salary.tds || salary.employerName || salary.employerTan || salary.exemptions || salary.standardDeduction) ? salary : null,
     interest,
     dividend,
     business,

@@ -114,6 +114,17 @@ export default async function DocumentDetailPage({
                     {level} {(e.confidence * 100).toFixed(0)}%
                   </Badge>
                 </div>
+                <p className="sans text-sm">
+                  {fact?.status === "CONFLICT" || e.status === "CONFLICT"
+                    ? "Conflict — not used"
+                    : fact?.status === "VERIFIED" || e.status === "CONFIRMED"
+                      ? "Confirmed"
+                      : fact?.status === "REJECTED" || e.status === "REJECTED"
+                        ? "Rejected"
+                        : "Needs review"}
+                  {" · "}
+                  {processableDocumentLabel(doc.kind)}
+                </p>
                 {low ? <p className="text-sm text-amber-800">LOW CONFIDENCE — review before verifying.</p> : null}
                 <p>Value: {e.extractedValue}</p>
                 {e.originalValue ? <p className="sans text-xs">Original extracted value: {e.originalValue}</p> : null}
@@ -127,36 +138,37 @@ export default async function DocumentDetailPage({
                 ) : null}
                 {fact?.status === "CONFLICT" ? (
                   <p className="text-sm text-red-800">
-                    Some information conflicts with another document.{" "}
+                    Some information conflicts with another document. This value is not used until the conflict is resolved.{" "}
                     <Link href={`/returns/${id}/documents#conflicts`} className="underline">
                       Review conflict
                     </Link>
                   </p>
-                ) : null}
-                <div className="flex flex-wrap gap-2">
-                  <form action={reviewExtractionAction}>
-                    <input type="hidden" name="extractionId" value={e.id} />
-                    <input type="hidden" name="decision" value="confirm" />
-                    <Button type="submit" className="min-h-11" aria-label={`Verify ${e.fieldKey}`}>
-                      Verify
-                    </Button>
-                  </form>
-                  <form action={reviewExtractionAction} className="flex min-w-0 flex-1 flex-wrap gap-2">
-                    <input type="hidden" name="extractionId" value={e.id} />
-                    <input type="hidden" name="decision" value="edit" />
-                    <Input name="edited" placeholder="Edit value" aria-label={`Edit ${e.fieldKey}`} className="min-h-11" />
-                    <Button variant="outline" className="min-h-11" aria-label={`Save edited ${e.fieldKey}`}>
-                      Edit
-                    </Button>
-                  </form>
-                  <form action={reviewExtractionAction}>
-                    <input type="hidden" name="extractionId" value={e.id} />
-                    <input type="hidden" name="decision" value="reject" />
-                    <Button variant="ghost" className="min-h-11" aria-label={`Reject ${e.fieldKey}`}>
-                      Reject
-                    </Button>
-                  </form>
-                </div>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    <form action={reviewExtractionAction}>
+                      <input type="hidden" name="extractionId" value={e.id} />
+                      <input type="hidden" name="decision" value="confirm" />
+                      <Button type="submit" className="min-h-11" aria-label={`Verify ${e.fieldKey}`}>
+                        Verify
+                      </Button>
+                    </form>
+                    <form action={reviewExtractionAction} className="flex min-w-0 flex-1 flex-wrap gap-2">
+                      <input type="hidden" name="extractionId" value={e.id} />
+                      <input type="hidden" name="decision" value="edit" />
+                      <Input name="edited" defaultValue={e.extractedValue} aria-label={`Edit ${e.fieldKey}`} className="min-h-11" />
+                      <Button variant="outline" className="min-h-11" aria-label={`Save edited ${e.fieldKey}`}>
+                        Save edit
+                      </Button>
+                    </form>
+                    <form action={reviewExtractionAction}>
+                      <input type="hidden" name="extractionId" value={e.id} />
+                      <input type="hidden" name="decision" value="reject" />
+                      <Button variant="ghost" className="min-h-11" aria-label={`Reject ${e.fieldKey}`}>
+                        Reject
+                      </Button>
+                    </form>
+                  </div>
+                )}
               </Card>
             );
           })}

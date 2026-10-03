@@ -73,3 +73,10 @@ export function canEnterTaxModel(status: string, verified: boolean) {
   if (status === "PENDING") return false;
   return status === "VERIFIED" && verified;
 }
+
+/** An edited extraction stays unconfirmed until the user verifies it. */
+export function reviewFactStatus(decision: string): { status: "VERIFIED" | "REJECTED" | "AI_EXTRACTED"; verified: boolean } {
+  if (decision === "reject") return { status: "REJECTED", verified: false };
+  if (decision === "confirm") return { status: "VERIFIED", verified: true };
+  return { status: "AI_EXTRACTED", verified: false };
+}

@@ -11,6 +11,7 @@ import {
   type PreparationState,
   type SalaryModel,
 } from "@/lib/documents/prefill";
+import { reviewFactStatus } from "@/lib/documents/mapping";
 
 const form16 = (field: string, amount: number, id: string): AuthoritativeFact => ({
   id,
@@ -169,5 +170,43 @@ describe("Phase 10 document → preparation automation", () => {
     const applySrc = readFileSync(join(process.cwd(), "src/lib/documents/applyVerified.ts"), "utf8");
     expect(applySrc).toContain("recomputeReturn");
     expect(applySrc).not.toContain("generateITRJson");
+  });
+
+  it("does not double salary when two documents agree", () => {
+    const result = apply({
+      prep: emptyPreparation(),
+      salary: null,
+      facts: [form16("salary.grossSalary", 1_250_000, "f-salary"), ais("income.salary.ais", 1_250_000, "a-salary")],
+    });
+    expect(result.salary?.grossSalary).toBe(1_250_000);
+  });
+
+  it("drops an imported salary after the fact is rejected", () => {
+    const imported = apply({ prep: emptyPreparation(), salary: null, facts: [form16("salary.grossSalary", 1_250_000, "f-salary")] });
+    const rejected = apply({
+      prep: imported.prep,
+      salary: imported.salary,
+      facts: [{ ...form16("salary.grossSalary", 1_250_000, "f-salary"), status: "REJECTED", verified: false }],
+    });
+    expect(rejected.salary?.grossSalary).toBe(0);
+    expect(rejected.prep.fields["salary.grossSalary"]).toBeUndefined();
+  });
+
+  it("does not keep the earlier document once a salary conflict is open", () => {
+    const imported = apply({ prep: emptyPreparation(), salary: null, facts: [form16("salary.grossSalary", 1_250_000, "f-salary")] });
+    const conflicted = apply({
+      prep: imported.prep,
+      salary: imported.salary,
+      facts: [form16("salary.grossSalary", 1_250_000, "f-salary"), ais("income.salary.ais", 1_280_000, "a-salary")],
+      openGroups: new Set(["SALARY"]),
+    });
+    expect(conflicted.salary?.grossSalary).toBe(0);
+    expect(conflicted.prep.fields["salary.grossSalary"]).toBeUndefined();
+  });
+
+  it("keeps an edited extraction unconfirmed", () => {
+    expect(reviewFactStatus("edit")).toEqual({ status: "AI_EXTRACTED", verified: false });
+    expect(reviewFactStatus("confirm")).toEqual({ status: "VERIFIED", verified: true });
+    expect(reviewFactStatus("reject")).toEqual({ status: "REJECTED", verified: false });
   });
 });
