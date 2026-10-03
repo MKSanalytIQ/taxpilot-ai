@@ -170,6 +170,92 @@ describe("pipeline", () => {
     expect(r.pages.every((p) => !p.text)).toBe(true);
   });
 
+  it("routes a scanned image through OCR text into Form 16 fields", async () => {
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
+    const r = await runExtraction(
+      { bytes: png, fileName: "scan.png", mimeType: "image/png", declaredKind: "FORM_16" },
+      {
+        ocr: {
+          name: "test",
+          configured: true,
+          async extractText() {
+            return { pages: [{ pageNumber: 1, text: "Form 16 PAN: AAAPA1234A Gross Salary: 12,50,000 Tax Deducted: 1,10,000" }] };
+          },
+          async extract() {
+            return [];
+          },
+        },
+      },
+    );
+    expect(r.usedOcr).toBe(true);
+    expect(r.errorCode).toBeUndefined();
+    expect(r.fields.find((f) => f.field === "grossSalary")?.numericValue).toBe(1_250_000);
+    expect(r.fields.find((f) => f.field === "employeePan")?.value).toBe("AAAPA1234A");
+    expect(r.fields.find((f) => f.field === "grossSalary")?.extractionMethod).toBe("OCR");
+  });
+
+  it("keeps a failed OCR call on the manual-entry path", async () => {
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const thrown = await runExtraction(
+      { bytes: png, fileName: "scan.png", mimeType: "image/png", declaredKind: "FORM_16" },
+      {
+        ocr: {
+          name: "test",
+          configured: true,
+          async extractText() {
+            throw new Error("vision key super-secret-vision-key");
+          },
+          async extract() {
+            return [];
+          },
+        },
+      },
+    );
+    expect(thrown.errorCode).toBe("MANUAL_REVIEW_REQUIRED");
+    expect(thrown.errorMessage).toBe("OCR failed. Enter values manually.");
+    expect(thrown.errorMessage).not.toContain("super-secret");
+    expect(thrown.fields).toEqual([]);
+
+    const leaked = await runExtraction(
+      { bytes: png, fileName: "scan.png", mimeType: "image/png", declaredKind: "FORM_16" },
+      {
+        ocr: {
+          name: "test",
+          configured: true,
+          async extractText() {
+            return { pages: [], error: "rejected key super-secret-vision-key" };
+          },
+          async extract() {
+            return [];
+          },
+        },
+      },
+    );
+    expect(leaked.errorCode).toBe("MANUAL_REVIEW_REQUIRED");
+    expect(leaked.errorMessage).not.toContain("super-secret");
+  });
+
+  it("uses OCR when a PDF has no text layer", async () => {
+    const bytes = Buffer.from("%PDF-1.4 scanned form");
+    const r = await runExtraction(
+      { bytes, fileName: "form16.pdf", mimeType: "application/pdf", declaredKind: "FORM_16" },
+      {
+        ocr: {
+          name: "test",
+          configured: true,
+          async extractText() {
+            return { pages: [{ pageNumber: 1, text: "Form 16 Gross Salary: 100000 Tax Deducted: 5000" }] };
+          },
+          async extract() {
+            return [];
+          },
+        },
+      },
+    );
+    expect(r.usedOcr).toBe(true);
+    expect(r.fields.find((f) => f.field === "grossSalary")?.numericValue).toBe(100_000);
+  });
+
   it("does not treat a non-PDF buffer as a single invented page", async () => {
     const pages = await extractPdfPages(Buffer.from("not a pdf"));
     expect(pages).toEqual([]);

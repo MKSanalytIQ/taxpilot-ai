@@ -36,6 +36,13 @@ function emptyResult(kind: DocumentType, pages: PdfPage[], extra?: Partial<Extra
   };
 }
 
+function publicOcrMessage(error?: string) {
+  if (!error || error.length > 160 || /key|secret|token|bearer|googleapis|authorization/i.test(error)) {
+    return "OCR failed. Enter values manually.";
+  }
+  return error;
+}
+
 function applyMethod(result: ExtractionResult, method: ExtractionMethod) {
   return {
     ...result,
@@ -84,12 +91,21 @@ export async function runExtraction(
         errorMessage: "Image/scanned OCR is not configured. Enter values manually.",
       });
     }
-    const ocrText = await ocr.extractText({ fileName: input.fileName, mimeType: mime, bytes: input.bytes });
+    let ocrText: Awaited<ReturnType<DocumentExtractionProvider["extractText"]>>;
+    try {
+      ocrText = await ocr.extractText({ fileName: input.fileName, mimeType: mime, bytes: input.bytes });
+    } catch {
+      return emptyResult(kind, pages, {
+        usedOcr: true,
+        errorCode: "MANUAL_REVIEW_REQUIRED",
+        errorMessage: "OCR failed. Enter values manually.",
+      });
+    }
     if (!ocrText.pages.some((p) => p.text)) {
       return emptyResult(kind, pages, {
         usedOcr: true,
         errorCode: "MANUAL_REVIEW_REQUIRED",
-        errorMessage: "OCR returned no text. Enter values manually.",
+        errorMessage: publicOcrMessage(ocrText.error),
       });
     }
     pages = ocrText.pages;
