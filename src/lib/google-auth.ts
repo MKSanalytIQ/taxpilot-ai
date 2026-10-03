@@ -41,6 +41,28 @@ export function googleRedirectUri(origin = process.env.NEXT_PUBLIC_APP_URL) {
   return `${base}/api/auth/google/callback`;
 }
 
+function isLocalOrigin(value: string) {
+  try {
+    const host = new URL(value).hostname.toLowerCase();
+    return host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "[::1]";
+  } catch {
+    return true;
+  }
+}
+
+/** Production never falls back to a localhost redirect. Development still can. */
+export function googleAppOrigin(requestOrigin: string, env: { nodeEnv?: string; appUrl?: string } = {}) {
+  const nodeEnv = env.nodeEnv ?? process.env.NODE_ENV;
+  const configured = String(env.appUrl ?? process.env.NEXT_PUBLIC_APP_URL ?? "").trim().replace(/\/+$/, "");
+  const request = String(requestOrigin || "").trim().replace(/\/+$/, "");
+  if (nodeEnv === "production") {
+    if (configured && !isLocalOrigin(configured)) return configured;
+    if (request && !isLocalOrigin(request)) return request;
+    return "";
+  }
+  return configured || request || "http://127.0.0.1:3002";
+}
+
 export function createGoogleState() {
   return randomBytes(16).toString("hex");
 }

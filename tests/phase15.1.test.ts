@@ -5,6 +5,7 @@ import { join } from "path";
 import { isProUser } from "@/lib/plan";
 import {
   completeGoogleLoginWith,
+  googleAppOrigin,
   googlePublicConfig,
   googleRedirectUri,
   isGoogleConfigured,
@@ -86,6 +87,12 @@ describe("Phase 15.1 Google login + Razorpay atomicity", () => {
     expect(src("src/app/login/page.tsx")).not.toMatch(/GOOGLE_CLIENT_SECRET/);
     expect(src(".env.example")).toContain("GOOGLE_CLIENT_ID=");
     expect(src(".env.example")).toContain("GOOGLE_CLIENT_SECRET=");
+  });
+
+  it("production Google redirects do not fall back to localhost", () => {
+    expect(googleAppOrigin("https://app.taxpilot.test", { nodeEnv: "production", appUrl: "" })).toBe("https://app.taxpilot.test");
+    expect(googleAppOrigin("http://127.0.0.1:3002", { nodeEnv: "production", appUrl: "http://localhost:3002" })).toBe("");
+    expect(googleAppOrigin("http://127.0.0.1:3002", { nodeEnv: "development", appUrl: "" })).toBe("http://127.0.0.1:3002");
   });
 
   it("TEST 2: successful Google authentication creates a TaxPilot session", async () => {

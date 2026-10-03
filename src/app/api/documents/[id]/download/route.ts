@@ -12,10 +12,11 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   if (!doc || doc.deletedAt) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (!canAccessDocument(doc.userId, session)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const bytes = await getStorage().get(doc.storageKey);
+  const filename = doc.fileName.replace(/[^\w.\- ]+/g, "_").slice(0, 120) || "document";
   return new NextResponse(new Uint8Array(bytes), {
     headers: {
       "Content-Type": doc.mimeType,
-      "Content-Disposition": `attachment; filename="${doc.fileName.replace(/"/g, "")}"`,
+      "Content-Disposition": `attachment; filename="${filename}"`,
       "Cache-Control": "private, no-store",
     },
   });
