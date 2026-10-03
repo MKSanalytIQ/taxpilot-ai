@@ -117,7 +117,10 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
         <ReturnNav id={id} current="review" />
         <h1 className="text-3xl">Final review</h1>
         <p className="sans mt-2 text-sm text-[#5c6773]">
-          This page summarises the return. JSON generation stays blocked unless the filing gate allows it.
+          This page summarises the return. JSON generation stays blocked unless the filing gate allows it.{" "}
+          <Link href={`/returns/${id}/history`} className="underline">
+            History
+          </Link>
         </p>
 
         <Card className="mt-6 flex items-center justify-between gap-3">

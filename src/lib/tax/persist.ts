@@ -7,6 +7,7 @@ import { determineItrType } from "@/lib/tax-rules/ay2026_27/eligibility";
 import { json } from "@/lib/utils";
 import { nextJsonFileStatuses } from "@/lib/json/lifecycle";
 import { verifySchemaIntegrity } from "@/lib/itr-json/schemaIntegrity";
+import { buildVersionSnapshot, recordReturnVersion } from "@/lib/versions";
 
 export async function recomputeReturn(returnId: string) {
   const data = await loadNormalized(returnId);
@@ -176,5 +177,22 @@ export async function recomputeReturn(returnId: string) {
       status,
     },
   });
+  if ((ret.dataFingerprint || "") !== fingerprint) {
+    await recordReturnVersion({
+      returnId,
+      userId: ret.userId,
+      note: "Recalculated",
+      snapshot: buildVersionSnapshot({
+        assessmentYear: ret.assessmentYear,
+        itrType,
+        taxRegime: ret.taxRegime,
+        status,
+        estimatedTax: calc.totalTax,
+        estimatedRefund: Math.max(0, calc.refundOrPayable),
+        fingerprint,
+        schemaVersion: "Ver1.0",
+      }),
+    });
+  }
   return { updated, calc, eligibility: eligWithIncome, issues };
 }
