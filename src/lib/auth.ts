@@ -1,12 +1,13 @@
 import { SignJWT, jwtVerify } from "jose";
 import bcrypt from "bcryptjs";
 import { cookies } from "next/headers";
+import { authSecretBytes } from "./production";
 import { prisma } from "./db";
 
 const COOKIE = "tp_session";
 
 function secret() {
-  return new TextEncoder().encode(process.env.AUTH_SECRET || "dev-only-change-taxpilot-secret-32b");
+  return authSecretBytes();
 }
 
 export type Session = {

@@ -6,7 +6,7 @@ export default function Faq() {
     ["Does TaxPilot file my return?", "No. You download ITR JSON and upload it on the Income Tax e-filing portal. Direct filing is not implemented."],
     ["Is this government software?", "No. TaxPilot AI is independent and is not affiliated with or endorsed by the Income Tax Department."],
     ["Does the AI calculate my tax?", "No. The assistant asks questions and explains concepts. Tax, eligibility and JSON are produced by versioned rule engines."],
-    ["Which year is supported?", "Assessment Year 2026–27 (FY 2025–26). ITR-4 is the complete path. ITR-3 has architecture and screens."],
+    ["Which year is supported?", "Assessment Year 2026–27 (FY 2025–26). ITR-4 is the filing path. ITR-3 can be reviewed, and its JSON download stays off in production unless the deployment explicitly enables it."],
     ["Will AIS overwrite my numbers?", "Never automatically. AIS/26AS is reconciliation data you review."],
   ];
   return (

@@ -86,6 +86,8 @@ export default async function JsonPage({ params }: { params: Promise<{ id: strin
             ) : null}
             <p className="sans mt-6 text-sm text-[#5c6773]">
               This file is prepared for upload through the Income Tax Department’s applicable filing workflow. TaxPilot AI does not itself file the return.
+              Section 234A uses the JSON generation date as the intended filing date, so regenerate the file on the day you upload.
+              {ret.itrType === "ITR-3" ? " ITR-3 JSON is not enabled for this deployment unless the operator turns it on. 44AE, non-112A capital gains, and loss carry-forward stay blocked." : ""}
             </p>
             <div className="mt-6">
               <Disclaimer />

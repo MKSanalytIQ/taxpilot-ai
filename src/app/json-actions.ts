@@ -9,6 +9,7 @@ import { canGenerateItrJson } from "@/lib/itr-json/mapper";
 import { mkdir, writeFile } from "fs/promises";
 import path from "path";
 import { getUserAccess, jsonExportUpgradePath } from "@/lib/plan";
+import { limitRequest } from "@/lib/rate-limit";
 
 export async function generateJsonAction(formData: FormData) {
   const session = await getSession();
@@ -16,6 +17,7 @@ export async function generateJsonAction(formData: FormData) {
   const id = String(formData.get("returnId") || "");
   const ret = await prisma.taxReturn.findFirst({ where: { id, userId: session.userId } });
   if (!ret || !canAccessReturn(ret.userId, session)) redirect("/dashboard");
+  if (!(await limitRequest(`json:${session.userId}`, 10, 600_000)).ok) redirect(`/returns/${id}/json?error=rate`);
   const access = await getUserAccess(session.userId);
   if (!access.isPro) redirect(jsonExportUpgradePath(id));
   const gate = await canGenerateItrJson(id, {

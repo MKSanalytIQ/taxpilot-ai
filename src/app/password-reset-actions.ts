@@ -5,7 +5,8 @@ import { headers } from "next/headers";
 import { prisma } from "@/lib/db";
 import { clearSession, hashPassword } from "@/lib/auth";
 import { requestPasswordResetWith, completePasswordResetWith, prismaPasswordResetStore, RESET_UNAVAILABLE_MESSAGE } from "@/lib/password-reset";
-import { rateLimit } from "@/lib/rate-limit";
+import { limitRequest } from "@/lib/rate-limit";
+import { logSafe } from "@/lib/production";
 
 function rethrowControl(error: unknown) {
   unstable_rethrow(error);
@@ -22,7 +23,7 @@ async function clientIp() {
 export async function requestPasswordResetAction(formData: FormData) {
   const email = String(formData.get("email") || "").toLowerCase().trim();
   const ip = await clientIp();
-  if (!rateLimit(`reset:${email}`, 1, 60_000).ok || (ip && !rateLimit(`reset-ip:${ip}`, 8, 60_000).ok)) {
+  if (!(await limitRequest(`reset:${email}`, 1, 60_000)).ok || (ip && !(await limitRequest(`reset-ip:${ip}`, 8, 60_000)).ok)) {
     redirect("/forgot-password?sent=1");
   }
   try {
@@ -31,7 +32,8 @@ export async function requestPasswordResetAction(formData: FormData) {
     if (result.message === RESET_UNAVAILABLE_MESSAGE) redirect("/forgot-password?error=unavailable");
   } catch (error) {
     rethrowControl(error);
-    console.error("password reset request failed", error);
+    console.error("password reset request failed");
+    logSafe("password-reset", error);
     redirect("/forgot-password?error=unavailable");
   }
   redirect("/forgot-password?sent=1");
@@ -52,7 +54,8 @@ export async function completePasswordResetAction(formData: FormData) {
     await clearSession();
   } catch (error) {
     rethrowControl(error);
-    console.error("password reset failed", error);
+    console.error("password reset failed");
+    logSafe("password-reset-complete", error);
     redirect("/reset-password?error=invalid");
   }
   redirect("/login?reset=1");

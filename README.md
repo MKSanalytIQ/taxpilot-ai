@@ -34,7 +34,7 @@ Sources: [ITD tax rates](https://www.incometaxindia.gov.in/w/%E2%80%8Btax-rates-
 ITR-4_2026_Main_V1.1.json, released 30 Jun 2026, SchemaVer `Ver1.0`, SHA-256 in `metadata.json`.  
 Validated with **AJV draft-04**. The old adapter schema is in `.../development/adapter.schema.json` and is **not** used in production.
 
-**ITR-3 is not filing-ready.** JSON download is disabled for ITR-3.
+**ITR-3 JSON download is off in production** unless `ITR3_JSON_ENABLED=true`. The mapper and official schema checks still run in development and tests. 44AE, non-112A capital gains, and loss carry-forward block JSON. ITR-3 is not a complete CBDT rules audit.
 
 ## Run locally
 
@@ -67,9 +67,12 @@ npm run build
 
 | Variable | Purpose |
 |---|---|
-| `DATABASE_URL` | PostgreSQL |
-| `AUTH_SECRET` | Session JWT |
-| `S3_BUCKET`, `S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_REGION` | Private object storage. Required in production. |
+| `DATABASE_URL` / `DATABASE_URL_UNPOOLED` | PostgreSQL. Apply migrations with `npm run db:deploy`, not from the app build. |
+| `AUTH_SECRET` | Session JWT. Required in production, at least 32 characters. The process exits on boot if it is missing. |
+| `S3_BUCKET`, `S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_REGION` | Private object storage. Required in production. Downloads use a 60-second signed URL. |
+| `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | Shared rate limit. Required in production. Login, signup, reset, upload, and JSON generation fail closed without it. |
+| `ITR3_JSON_ENABLED` | Set to `true` only after an ITR-3 filing review. Otherwise production will not download ITR-3 JSON. |
+| `OCR_PROVIDER`, `GOOGLE_VISION_API_KEY` | Server-side OCR for scanned PDF and images. |
 | `OCR_PROVIDER`, `GOOGLE_VISION_API_KEY` | Server-side OCR for scanned PDF and images. |
 | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`, `PRO_PRICE_INR` | Pro checkout and webhook. |
 | `RESEND_API_KEY`, `RESET_EMAIL_FROM` or `EMAIL_FROM`, `NEXT_PUBLIC_APP_URL` | Password reset email. |
@@ -97,15 +100,25 @@ Golden files: `tests/fixtures/itr4/ay2026_27/*.json`
 
 ## Production database
 
-Local and production use PostgreSQL (`DATABASE_URL`). Locally, run `npm run db:up`.
+Local and production use PostgreSQL (`DATABASE_URL`). Locally, run `npm run db:up`. Production schema changes use `npm run db:deploy` (`prisma migrate deploy`). The Vercel build only generates the client and builds Next.js. It does not run `db push`.
+
+Promote an operator after they sign up:
+
+```bash
+CONFIRM_ADMIN=yes npx tsx scripts/promote-admin.ts you@example.com
+```
+
+Signed-in users can export or delete their account at `/account`.
 
 ## Known limitations
 
 - Official CBDT *business* validation rules PDF is referenced, not executed as a rules engine (JSON Schema + our deterministic rules are applied).
 - 44AE vehicles UI is partial.
-- ITR-3 and ITR-4 JSON are generated from the official schemas after validation.
+- ITR-4 JSON is the supported download. ITR-3 JSON stays disabled in production unless `ITR3_JSON_ENABLED=true`.
+- Section 234A uses the JSON generation date as the intended filing date.
+- Two-factor authentication is not implemented.
 - Without `GOOGLE_VISION_API_KEY`, scanned files stay in manual review and are not auto-filed.
-- No portal filing.
+- No portal filing. Re-check the official schema on the Income Tax downloads page before a filing window.
 
 ## Next phase
 

@@ -43,6 +43,9 @@ export function SiteHeader({ authed, name, admin }: { authed?: boolean; name?: s
       <Link href="/faq" onClick={close}>
         FAQ
       </Link>
+      <Link href="/privacy" onClick={close}>
+        Privacy
+      </Link>
       <Link href="/login" onClick={close}>
         Log in
       </Link>
@@ -56,6 +59,9 @@ export function SiteHeader({ authed, name, admin }: { authed?: boolean; name?: s
     <>
       <Link href="/dashboard" onClick={close}>
         Dashboard
+      </Link>
+      <Link href="/account" onClick={close}>
+        Account
       </Link>
       {admin ? (
         <Link href="/admin" onClick={close}>

@@ -4,7 +4,8 @@ import { redirect, unstable_rethrow } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { createSession, clearSession, getSession, hashPassword, verifyPassword, canAccessReturn } from "@/lib/auth";
-import { rateLimit } from "@/lib/rate-limit";
+import { limitRequest } from "@/lib/rate-limit";
+import { logSafe } from "@/lib/production";
 import { audit } from "@/lib/audit";
 import { seedInterview } from "@/lib/interview";
 import { recomputeReturn } from "@/lib/tax/persist";
@@ -38,7 +39,7 @@ export async function signupAction(formData: FormData) {
   const email = String(formData.get("email") || "").toLowerCase().trim();
   const password = String(formData.get("password") || "");
   const name = String(formData.get("name") || "").trim();
-  if (!rateLimit(`signup:${email}`, 8, 600_000).ok) redirect("/signup?error=rate");
+  if (!(await limitRequest(`signup:${email}`, 8, 600_000)).ok) redirect("/signup?error=rate");
   if (!email.includes("@") || password.length < 8 || !name) redirect("/signup?error=invalid");
   try {
     if (await prisma.user.findUnique({ where: { email } })) redirect("/signup?error=exists");
@@ -57,7 +58,8 @@ export async function signupAction(formData: FormData) {
     await createSession(user.id);
   } catch (error) {
     rethrowControl(error);
-    console.error("signup failed", error);
+    console.error("signup failed");
+    logSafe("signup", error);
     redirect("/signup?error=db");
   }
   redirect("/dashboard");
@@ -66,7 +68,7 @@ export async function signupAction(formData: FormData) {
 export async function loginAction(formData: FormData) {
   const email = String(formData.get("email") || "").toLowerCase().trim();
   const password = String(formData.get("password") || "");
-  if (!rateLimit(`login:${email}`, 10, 600_000).ok) redirect("/login?error=rate");
+  if (!(await limitRequest(`login:${email}`, 10, 600_000)).ok) redirect("/login?error=rate");
   let role = "USER";
   try {
     const user = await prisma.user.findUnique({ where: { email } });
@@ -74,11 +76,13 @@ export async function loginAction(formData: FormData) {
     role = user.role;
     await createSession(user.id);
     await audit({ userId: user.id, action: "login", entity: "User", entityId: user.id }).catch((error) => {
-      console.error("login audit failed", error);
+      console.error("login audit failed");
+      logSafe("login-audit", error);
     });
   } catch (error) {
     rethrowControl(error);
-    console.error("login failed", error);
+    console.error("login failed");
+    logSafe("login", error);
     redirect("/login?error=db");
   }
   redirect(role === "ADMIN" ? "/admin" : "/dashboard");
@@ -110,7 +114,8 @@ export async function createReturnAction(formData: FormData) {
     await recomputeReturn(ret.id);
   } catch (error) {
     rethrowControl(error);
-    console.error("create return follow-up failed", error);
+    console.error("create return follow-up failed");
+    logSafe("create-return", error);
   }
   redirect(`/returns/${ret.id}/interview`);
 }
@@ -526,6 +531,7 @@ export async function uploadDocumentAction(formData: FormData) {
   const id = String(formData.get("returnId") || "");
   const ret = await prisma.taxReturn.findFirst({ where: { id, userId: session.userId } });
   if (!ret) redirect("/dashboard");
+  if (!(await limitRequest(`upload:${session.userId}`, 20, 600_000)).ok) redirect(`/returns/${id}/documents?error=rate`);
   const file = formData.get("file");
   if (!(file instanceof File) || !file.size) redirect(`/returns/${id}/documents?error=file`);
   const bytes = Buffer.from(await file.arrayBuffer());

@@ -89,7 +89,7 @@ export default async function Interview({ params }: { params: Promise<{ id: stri
         </div>
         {ret.itrType === "ITR-3" ? (
           <Card className="mt-4">
-            <p className="font-medium">You are on the ITR-3 path. Enter income and review the tax computation. ITR-3 JSON can be generated after official schema validation passes.</p>
+            <p className="font-medium">You are on the ITR-3 path. Enter income and review the tax computation. ITR-3 JSON download is disabled in production unless this deployment explicitly enables it.</p>
           </Card>
         ) : null}
         {!eligibility.itr4Eligible ? (

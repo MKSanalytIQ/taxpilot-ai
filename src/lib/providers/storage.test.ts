@@ -39,6 +39,11 @@ describe("document storage", () => {
     expect(captured.body?.toString()).toBe("pdf-bytes");
     expect(JSON.stringify(captured)).not.toContain("super-secret-storage");
     await expect(storage.put("../etc/passwd", Buffer.from("x"), "text/plain")).rejects.toThrow("STORAGE_KEY_REJECTED");
-    expect(await storage.signedUrl("user-a/form.pdf", 60)).toBe("");
+    const signed = await storage.signedUrl("user-a/form.pdf", 60);
+    expect(signed.startsWith("https://storage.example.test/taxpilot-private/user-a/form.pdf?")).toBe(true);
+    expect(signed).toContain("X-Amz-Algorithm=AWS4-HMAC-SHA256");
+    expect(signed).toContain("X-Amz-Expires=60");
+    expect(signed).toContain("X-Amz-Signature=");
+    expect(signed).not.toContain("super-secret-storage");
   });
 });
