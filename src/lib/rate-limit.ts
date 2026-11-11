@@ -35,8 +35,8 @@ export async function limitRequest(
   env: NodeJS.ProcessEnv = process.env,
   fetchImpl: typeof fetch = fetch,
 ) {
-  const url = String(env.UPSTASH_REDIS_REST_URL || "").trim().replace(/\/+$/, "");
-  const token = String(env.UPSTASH_REDIS_REST_TOKEN || "").trim();
+  const url = String(env.UPSTASH_REDIS_REST_URL || env.KV_REST_API_URL || "").trim().replace(/\/+$/, "");
+  const token = String(env.UPSTASH_REDIS_REST_TOKEN || env.KV_REST_API_TOKEN || "").trim();
   if (url && token) {
     try {
       const redisKey = `tp:rl:${key}`;

@@ -31,7 +31,9 @@ export function objectStorageConfigured(env: NodeJS.ProcessEnv = process.env) {
 }
 
 export function sharedRateLimitConfigured(env: NodeJS.ProcessEnv = process.env) {
-  return Boolean(String(env.UPSTASH_REDIS_REST_URL || "").trim() && String(env.UPSTASH_REDIS_REST_TOKEN || "").trim());
+  const url = String(env.UPSTASH_REDIS_REST_URL || env.KV_REST_API_URL || "").trim();
+  const token = String(env.UPSTASH_REDIS_REST_TOKEN || env.KV_REST_API_TOKEN || "").trim();
+  return Boolean(url && token);
 }
 
 export function productionReady(env: NodeJS.ProcessEnv = process.env) {

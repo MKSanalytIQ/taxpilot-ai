@@ -32,6 +32,14 @@ describe("production gates", () => {
     expect(productionReady(env)).toBe(true);
     expect(JSON.stringify(productionReady(env))).not.toContain("secret-value");
     expect(productionReady({ ...env, NEXT_PUBLIC_APP_URL: "http://app.example" })).toBe(false);
+    const { UPSTASH_REDIS_REST_URL: _url, UPSTASH_REDIS_REST_TOKEN: _token, ...withoutUpstash } = env;
+    expect(
+      productionReady({
+        ...withoutUpstash,
+        KV_REST_API_URL: "https://example.upstash.io",
+        KV_REST_API_TOKEN: "token-value",
+      } as NodeJS.ProcessEnv),
+    ).toBe(true);
   });
 
   it("fails closed in production when the shared limiter is missing", async () => {
@@ -52,6 +60,14 @@ describe("production gates", () => {
       fetchImpl,
     );
     expect(allowed).toEqual({ ok: true, shared: true });
+    const vercelNames = await limitRequest(
+      "login:kv",
+      10,
+      60_000,
+      { NODE_ENV: "production", KV_REST_API_URL: "https://example.upstash.io", KV_REST_API_TOKEN: "token" } as NodeJS.ProcessEnv,
+      fetchImpl,
+    );
+    expect(vercelNames).toEqual({ ok: true, shared: true });
   });
 
   it("omits secrets from an account export", () => {
