@@ -116,6 +116,7 @@ Signed-in users can export or delete their account at `/account`.
 - 44AE vehicles UI is partial.
 - ITR-4 JSON is the supported download. ITR-3 JSON stays disabled in production unless `ITR3_JSON_ENABLED=true`.
 - Section 234A uses the filing date chosen on the JSON page.
+- Without Razorpay (`RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, and `PRO_PRICE_INR`), Pro checkout stays off and signed-in users can generate and download ITR-4 JSON. Turning those variables on restores the Pro paywall.
 - Without `GOOGLE_VISION_API_KEY`, scanned files stay in manual review and are not auto-filed.
 - No portal filing. Re-check the official schema on the Income Tax downloads page before a filing window.
 

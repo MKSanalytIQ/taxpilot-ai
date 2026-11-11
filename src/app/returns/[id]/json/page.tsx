@@ -65,7 +65,7 @@ export default async function JsonPage({ params }: { params: Promise<{ id: strin
                   Review
                 </Link>
               </Card>
-            ) : access.isPro ? (
+            ) : access.canExport ? (
               <form action={generateJsonAction} className="mt-6 space-y-3">
                 <input type="hidden" name="returnId" value={id} />
                 <div>
@@ -81,7 +81,7 @@ export default async function JsonPage({ params }: { params: Promise<{ id: strin
             {current?.valid ? (
               <p className="sans mt-4 text-sm text-emerald-800">JSON generated successfully · Schema validation passed</p>
             ) : null}
-            {access.isPro && current?.valid ? (
+            {access.canExport && current?.valid ? (
               <Link href={`/api/returns/${id}/download-json`} className="mt-4 inline-block">
                 <Button variant="outline">Download ITR JSON</Button>
               </Link>

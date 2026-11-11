@@ -21,7 +21,7 @@ export async function generateJsonAction(formData: FormData) {
   const limited = await limitRequest(`json:${session.userId}`, 10, 600_000);
   if (!limited.ok) redirect(limited.shared ? `/returns/${id}/json?error=rate` : `/returns/${id}/json?error=unavailable`);
   const access = await getUserAccess(session.userId);
-  if (!access.isPro) redirect(jsonExportUpgradePath(id));
+  if (!access.canExport) redirect(jsonExportUpgradePath(id));
   const generatedAt = filingInstant(String(formData.get("filingDate") || ""));
   if (!generatedAt) redirect(`/returns/${id}/json?error=date`);
   const gate = await canGenerateItrJson(id, {

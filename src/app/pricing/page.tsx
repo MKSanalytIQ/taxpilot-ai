@@ -3,7 +3,7 @@ import { Card, Button, Disclaimer } from "@/components/ui";
 import { ProCheckoutButton } from "@/components/pro-checkout";
 import Link from "next/link";
 import { getSession } from "@/lib/auth";
-import { getUserAccess } from "@/lib/plan";
+import { getUserAccess, proBillingEnabled } from "@/lib/plan";
 import { displayProPriceLabel } from "@/lib/payment";
 import { PAYMENT_SUCCESS_DETAIL, PAYMENT_SUCCESS_HEADING } from "@/lib/payment-messages";
 
@@ -31,6 +31,7 @@ export default async function Pricing({
   const session = await getSession();
   const access = session ? await getUserAccess(session.userId) : null;
   const priceLabel = displayProPriceLabel();
+  const billing = proBillingEnabled();
   const success = Boolean(access?.isPro);
 
   return (
@@ -72,8 +73,10 @@ export default async function Pricing({
             </ul>
             {success && access?.isPro ? (
               <p className="sans mt-6 text-sm text-[#1f4e46]">Pro is active.</p>
-            ) : session ? (
+            ) : session && billing ? (
               <ProCheckoutButton />
+            ) : session ? (
+              <p className="sans mt-6 text-sm text-[#5c6773]">Pro billing is not open yet. ITR-4 JSON download is included.</p>
             ) : (
               <Link href="/login" className="mt-6 inline-block w-full sm:w-auto">
                 <Button className="min-h-11 w-full sm:w-auto" aria-label="Upgrade to Pro">
