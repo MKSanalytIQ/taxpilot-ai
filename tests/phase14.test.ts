@@ -89,9 +89,9 @@ describe("Phase 14 commercial access", () => {
     expect(requireProAccess({ plan: "FREE" }).allowed).toBe(false);
     expect(requireProAccess({ plan: "FREE" })).toMatchObject({ code: PRO_REQUIRED_CODE });
     expect(jsonExportUpgradePath("ret-1")).toBe("/returns/ret-1/summary?upgrade=1");
-    const off = {} as NodeJS.ProcessEnv;
+    const off = {} as unknown as NodeJS.ProcessEnv;
     expect(canExportItr({ plan: "FREE", status: "ACTIVE" }, off)).toBe(true);
-    const on = { RAZORPAY_KEY_ID: "rzp_test", RAZORPAY_KEY_SECRET: "secret", PRO_PRICE_INR: "499" } as NodeJS.ProcessEnv;
+    const on = { RAZORPAY_KEY_ID: "rzp_test", RAZORPAY_KEY_SECRET: "secret", PRO_PRICE_INR: "499" } as unknown as NodeJS.ProcessEnv;
     expect(canExportItr({ plan: "FREE", status: "ACTIVE" }, on)).toBe(false);
     expect(canExportItr({ plan: "PRO", status: "ACTIVE" }, on)).toBe(true);
   });
