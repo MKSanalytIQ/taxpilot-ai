@@ -349,7 +349,7 @@ describe("Phase 15 one-time Razorpay Pro upgrade", () => {
     expect(requireProAccess(mem.plans.get("user-a")).allowed).toBe(true);
     const generate = src("src/app/json-actions.ts");
     expect(generate).toContain("getUserAccess");
-    expect(generate).toContain("if (!access.isPro)");
+    expect(generate).toContain("if (!access.canExport)");
     expect(src("src/app/api/returns/[id]/download-json/route.ts")).toContain("getUserAccess");
   });
 

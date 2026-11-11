@@ -278,7 +278,7 @@ export default async function ReviewPage({ params }: { params: Promise<{ id: str
         {ready ? (
           <Card className="mt-4">
             <p className="font-medium">✓ Return ready for ITR-4 JSON generation</p>
-            {access.isPro ? (
+            {access.canExport ? (
               <form action={generateJsonAction} className="mt-4">
                 <input type="hidden" name="returnId" value={id} />
                 <Button type="submit">Generate ITR JSON</Button>

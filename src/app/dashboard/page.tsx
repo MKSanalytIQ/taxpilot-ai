@@ -58,7 +58,7 @@ export default async function Dashboard() {
                 Start your ITR-4
               </Button>
             </Link>
-            {!access.isPro ? <UpgradeCta className="mt-3 inline-block" /> : null}
+            {!access.canExport ? <UpgradeCta className="mt-3 inline-block" /> : null}
           </Card>
           <div className="mt-10">
             <Disclaimer />
@@ -175,7 +175,7 @@ export default async function Dashboard() {
               Continue return
             </Button>
           </Link>
-          {!access.isPro ? <UpgradeCta /> : null}
+          {!access.canExport ? <UpgradeCta /> : null}
         </div>
         <div className="mt-10">
           <Disclaimer />

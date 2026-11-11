@@ -95,7 +95,7 @@ export default async function SummaryPage({ params, searchParams }: { params: Pr
           <p className="sans mt-6 text-sm text-red-800">
             Unable to generate the return. Please correct the highlighted issues.
           </p>
-        ) : access.isPro ? (
+        ) : access.canExport ? (
           <form action={generateJsonAction} className="mt-6">
             <input type="hidden" name="returnId" value={id} />
             <Button type="submit">Generate ITR JSON</Button>
@@ -103,7 +103,7 @@ export default async function SummaryPage({ params, searchParams }: { params: Pr
         ) : (
           <ProUpgradeCard />
         )}
-        {access.isPro && ret.jsonFiles[0] ? (
+        {access.canExport && ret.jsonFiles[0] ? (
           <Link href={`/api/returns/${id}/download-json`} className="sans mt-4 inline-block text-sm text-[#1f4e46]">
             Download ITR JSON
           </Link>

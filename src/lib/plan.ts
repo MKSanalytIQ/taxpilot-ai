@@ -38,14 +38,30 @@ export function planLabel(subscription?: SubscriptionAccess): "Free" | "Pro" {
 export type UserAccess = {
   plan: AccessPlan;
   isPro: boolean;
+  canExport: boolean;
   label: "Free" | "Pro";
 };
 
-export function accessFromSubscription(subscription?: SubscriptionAccess): UserAccess {
+/** Pro checkout is on only when Razorpay and a rupee price are both set. */
+export function proBillingEnabled(env: NodeJS.ProcessEnv = process.env) {
+  const id = String(env.RAZORPAY_KEY_ID || "").trim();
+  const secret = String(env.RAZORPAY_KEY_SECRET || "").trim();
+  const price = Number(String(env.PRO_PRICE_INR || "").trim());
+  return Boolean(id && secret && Number.isFinite(price) && price > 0);
+}
+
+/** Paid export when billing is on. Included for every signed-in user while Razorpay is off. */
+export function canExportItr(subscription?: SubscriptionAccess, env: NodeJS.ProcessEnv = process.env) {
+  if (!proBillingEnabled(env)) return true;
+  return isProUser(subscription);
+}
+
+export function accessFromSubscription(subscription?: SubscriptionAccess, env: NodeJS.ProcessEnv = process.env): UserAccess {
   const isPro = isProUser(subscription);
   return {
     plan: isPro ? PLAN_PRO : PLAN_FREE,
     isPro,
+    canExport: canExportItr(subscription, env),
     label: isPro ? "Pro" : "Free",
   };
 }

@@ -3,6 +3,7 @@ import { readFileSync } from "fs";
 import { join } from "path";
 import {
   accessFromSubscription,
+  canExportItr,
   isProUser,
   jsonExportUpgradePath,
   normalizePlan,
@@ -72,22 +73,27 @@ describe("Phase 14 commercial access", () => {
     expect(generate.indexOf("getUserAccess")).toBeGreaterThan(-1);
     expect(generate.indexOf("getUserAccess")).toBeLessThan(generate.indexOf("canGenerateItrJson"));
     expect(generate).toContain("jsonExportUpgradePath");
-    expect(generate.indexOf("if (!access.isPro)")).toBeLessThan(generate.indexOf("writeFile"));
-    expect(generate.indexOf("if (!access.isPro)")).toBeLessThan(generate.indexOf("prisma.taxReturn.update"));
+    expect(generate.indexOf("if (!access.canExport)")).toBeLessThan(generate.indexOf("writeFile"));
+    expect(generate.indexOf("if (!access.canExport)")).toBeLessThan(generate.indexOf("prisma.taxReturn.update"));
 
     const download = src("src/app/api/returns/[id]/download-json/route.ts");
     expect(download).toContain("getUserAccess");
     expect(download).toContain("proRequiredBody");
-    expect(download.indexOf("if (!access.isPro)")).toBeLessThan(download.indexOf("iTRJsonFile.findFirst"));
+    expect(download.indexOf("if (!access.canExport)")).toBeLessThan(download.indexOf("iTRJsonFile.findFirst"));
 
     const apiGenerate = src("src/app/api/returns/[id]/generate-json/route.ts");
     expect(apiGenerate).toContain("getUserAccess");
-    expect(apiGenerate).toContain("if (!access.isPro)");
-    expect(apiGenerate.indexOf("if (!access.isPro)")).toBeLessThan(apiGenerate.indexOf("const gate = await canGenerateItrJson"));
+    expect(apiGenerate).toContain("if (!access.canExport)");
+    expect(apiGenerate.indexOf("if (!access.canExport)")).toBeLessThan(apiGenerate.indexOf("const gate = await canGenerateItrJson"));
 
     expect(requireProAccess({ plan: "FREE" }).allowed).toBe(false);
     expect(requireProAccess({ plan: "FREE" })).toMatchObject({ code: PRO_REQUIRED_CODE });
     expect(jsonExportUpgradePath("ret-1")).toBe("/returns/ret-1/summary?upgrade=1");
+    const off = {} as NodeJS.ProcessEnv;
+    expect(canExportItr({ plan: "FREE", status: "ACTIVE" }, off)).toBe(true);
+    const on = { RAZORPAY_KEY_ID: "rzp_test", RAZORPAY_KEY_SECRET: "secret", PRO_PRICE_INR: "499" } as NodeJS.ProcessEnv;
+    expect(canExportItr({ plan: "FREE", status: "ACTIVE" }, on)).toBe(false);
+    expect(canExportItr({ plan: "PRO", status: "ACTIVE" }, on)).toBe(true);
   });
 
   it("TEST 6: Free user receives upgrade UI", () => {
@@ -122,7 +128,7 @@ describe("Phase 14 commercial access", () => {
     expect(generate).toContain("canGenerateItrJson");
     expect(generate).toContain("writeFile");
     const jsonPage = src("src/app/returns/[id]/json/page.tsx");
-    expect(jsonPage).toContain("access.isPro");
+    expect(jsonPage).toContain("access.canExport");
     expect(jsonPage).toContain("generateJsonAction");
     expect(jsonPage).toContain("download-json");
   });
@@ -134,7 +140,7 @@ describe("Phase 14 commercial access", () => {
     expect(plan).not.toContain("calculationJson");
     expect(plan).toContain("select: { plan: true, status: true }");
     const generate = functionBody(src("src/app/json-actions.ts"), "generateJsonAction");
-    const deny = generate.indexOf("if (!access.isPro)");
+    const deny = generate.indexOf("if (!access.canExport)");
     const update = generate.indexOf("prisma.taxReturn.update");
     expect(deny).toBeGreaterThan(-1);
     expect(update).toBeGreaterThan(deny);
