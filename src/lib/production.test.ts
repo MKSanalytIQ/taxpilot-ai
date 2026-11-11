@@ -40,6 +40,8 @@ describe("production gates", () => {
         KV_REST_API_TOKEN: "token-value",
       } as NodeJS.ProcessEnv),
     ).toBe(true);
+    const { S3_BUCKET: _bucket, S3_ENDPOINT: _endpoint, S3_ACCESS_KEY: _access, S3_SECRET_KEY: _secret, ...withoutS3 } = env;
+    expect(productionReady({ ...withoutS3, BLOB_READ_WRITE_TOKEN: "blob-token" } as NodeJS.ProcessEnv)).toBe(true);
   });
 
   it("fails closed in production when the shared limiter is missing", async () => {

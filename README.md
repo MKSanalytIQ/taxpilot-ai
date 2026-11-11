@@ -69,7 +69,7 @@ npm run build
 |---|---|
 | `DATABASE_URL` / `DATABASE_URL_UNPOOLED` | PostgreSQL. Apply migrations with `npm run db:deploy`, not from the app build. |
 | `AUTH_SECRET` | Session JWT. Required in production, at least 32 characters. The process exits on boot if it is missing. |
-| `S3_BUCKET`, `S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_REGION` | Private object storage. Required in production. Downloads use a 60-second signed URL. |
+| `S3_BUCKET`, `S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_REGION` | Private object storage. Required in production unless `BLOB_READ_WRITE_TOKEN` is set. Downloads use a 60-second signed URL. |
 | `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | Shared rate limit. Required in production. `KV_REST_API_URL` and `KV_REST_API_TOKEN` from the Vercel Upstash integration are accepted too. Login, signup, reset, upload, and JSON generation fail closed without one of those pairs. |
 | `ITR3_JSON_ENABLED` | Set to `true` only after an ITR-3 filing review. Otherwise production will not download ITR-3 JSON. |
 | `OCR_PROVIDER`, `GOOGLE_VISION_API_KEY` | Server-side OCR for scanned PDF and images. |
