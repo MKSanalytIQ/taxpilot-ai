@@ -22,12 +22,13 @@ export function itr3JsonEnabled(env: NodeJS.ProcessEnv = process.env) {
 }
 
 export function objectStorageConfigured(env: NodeJS.ProcessEnv = process.env) {
-  return Boolean(
+  const s3 = Boolean(
     String(env.S3_BUCKET || "").trim() &&
       String(env.S3_ENDPOINT || "").trim() &&
       String(env.S3_ACCESS_KEY || "").trim() &&
       String(env.S3_SECRET_KEY || "").trim(),
   );
+  return s3 || Boolean(String(env.BLOB_READ_WRITE_TOKEN || "").trim());
 }
 
 export function sharedRateLimitConfigured(env: NodeJS.ProcessEnv = process.env) {

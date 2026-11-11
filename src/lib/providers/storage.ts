@@ -207,9 +207,80 @@ export class S3Storage implements StorageProvider {
   }
 }
 
-export function selectStorage(env: NodeJS.ProcessEnv = process.env, fetchImpl?: typeof fetch): StorageProvider {
+export function readBlobToken(env: NodeJS.ProcessEnv = process.env) {
+  return String(env.BLOB_READ_WRITE_TOKEN || "").trim();
+}
+
+type BlobPutOptions = { access: "private"; token: string; contentType?: string; addRandomSuffix: false };
+type BlobGetResult = { statusCode: number; stream: ReadableStream<Uint8Array> | null } | null;
+
+export type BlobClient = {
+  put(pathname: string, body: Buffer, options: BlobPutOptions): Promise<unknown>;
+  get(pathname: string, options: { access: "private"; token: string }): Promise<BlobGetResult>;
+  del(pathname: string, options: { token: string }): Promise<void>;
+};
+
+async function vercelBlobClient(): Promise<BlobClient> {
+  const blob = await import("@vercel/blob");
+  return {
+    put: (pathname, body, options) => blob.put(pathname, body, options),
+    get: (pathname, options) => blob.get(pathname, options),
+    del: (pathname, options) => blob.del(pathname, options),
+  };
+}
+
+/** Private Vercel Blob store. Downloads stay on the authenticated app route. */
+export class BlobStorage implements StorageProvider {
+  name = "vercel-blob";
+  #token: string;
+  #client: BlobClient | undefined;
+  #load: () => Promise<BlobClient>;
+
+  constructor(token: string, client?: BlobClient) {
+    this.#token = token;
+    this.#client = client;
+    this.#load = client ? async () => client : vercelBlobClient;
+  }
+
+  async #api() {
+    this.#client ??= await this.#load();
+    return this.#client;
+  }
+
+  async put(key: string, bytes: Buffer, contentType: string) {
+    assertPrivateKey(key);
+    await (
+      await this.#api()
+    ).put(key, bytes, {
+      access: "private",
+      token: this.#token,
+      contentType: contentType || "application/octet-stream",
+      addRandomSuffix: false,
+    });
+    return { key };
+  }
+
+  async get(key: string) {
+    assertPrivateKey(key);
+    const result = await (await this.#api()).get(key, { access: "private", token: this.#token });
+    if (!result || result.statusCode !== 200 || !result.stream) throw new Error("STORAGE_FAILED");
+    return Buffer.from(await new Response(result.stream).arrayBuffer());
+  }
+
+  async delete(key: string) {
+    assertPrivateKey(key);
+    await (await this.#api()).del(key, { token: this.#token });
+  }
+
+  async signedUrl() {
+    return "";
+  }
+}
+export function selectStorage(env: NodeJS.ProcessEnv = process.env, fetchImpl?: typeof fetch, blobClient?: BlobClient): StorageProvider {
   const config = readS3Config(env);
   if (config) return new S3Storage(config, fetchImpl);
+  const blobToken = readBlobToken(env);
+  if (blobToken) return new BlobStorage(blobToken, blobClient);
   if (env.NODE_ENV === "production" || env.VERCEL) return new UnconfiguredStorage();
   return new LocalDiskStorage();
 }
