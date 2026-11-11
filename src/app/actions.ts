@@ -3,7 +3,8 @@
 import { redirect, unstable_rethrow } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
-import { createSession, clearSession, getSession, hashPassword, verifyPassword, canAccessReturn } from "@/lib/auth";
+import { createSession, clearSession, clearTotpChallenge, createTotpChallenge, getSession, hashPassword, readTotpChallenge, verifyPassword, canAccessReturn } from "@/lib/auth";
+import { verifyTotp } from "@/lib/totp";
 import { limitRequest } from "@/lib/rate-limit";
 import { logSafe } from "@/lib/production";
 import { audit } from "@/lib/audit";
@@ -35,11 +36,16 @@ function rethrowControl(error: unknown) {
   }
 }
 
+async function enforceLimit(key: string, limit: number, windowMs: number, limitedTo: string, unavailableTo: string) {
+  const result = await limitRequest(key, limit, windowMs);
+  if (!result.ok) redirect(result.shared ? limitedTo : unavailableTo);
+}
+
 export async function signupAction(formData: FormData) {
   const email = String(formData.get("email") || "").toLowerCase().trim();
   const password = String(formData.get("password") || "");
   const name = String(formData.get("name") || "").trim();
-  if (!(await limitRequest(`signup:${email}`, 8, 600_000)).ok) redirect("/signup?error=rate");
+  await enforceLimit(`signup:${email}`, 8, 600_000, "/signup?error=rate", "/signup?error=unavailable");
   if (!email.includes("@") || password.length < 8 || !name) redirect("/signup?error=invalid");
   try {
     if (await prisma.user.findUnique({ where: { email } })) redirect("/signup?error=exists");
@@ -68,12 +74,17 @@ export async function signupAction(formData: FormData) {
 export async function loginAction(formData: FormData) {
   const email = String(formData.get("email") || "").toLowerCase().trim();
   const password = String(formData.get("password") || "");
-  if (!(await limitRequest(`login:${email}`, 10, 600_000)).ok) redirect("/login?error=rate");
+  await enforceLimit(`login:${email}`, 10, 600_000, "/login?error=rate", "/login?error=unavailable");
   let role = "USER";
   try {
     const user = await prisma.user.findUnique({ where: { email } });
-    if (!user || !(await verifyPassword(password, user.passwordHash))) redirect("/login?error=invalid");
+    if (!user || user.status !== "ACTIVE" || !(await verifyPassword(password, user.passwordHash))) redirect("/login?error=invalid");
     role = user.role;
+    if (user.totpEnabled) {
+      if (!user.totpSecret) redirect("/login?error=invalid");
+      await createTotpChallenge(user.id);
+      redirect("/login/totp");
+    }
     await createSession(user.id);
     await audit({ userId: user.id, action: "login", entity: "User", entityId: user.id }).catch((error) => {
       console.error("login audit failed");
@@ -86,6 +97,22 @@ export async function loginAction(formData: FormData) {
     redirect("/login?error=db");
   }
   redirect(role === "ADMIN" ? "/admin" : "/dashboard");
+}
+
+export async function completeTotpLoginAction(formData: FormData) {
+  const code = String(formData.get("code") || "");
+  const userId = await readTotpChallenge();
+  if (!userId) redirect("/login?error=invalid");
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user || user.status !== "ACTIVE" || !user.totpEnabled || !user.totpSecret || !verifyTotp(user.totpSecret, code)) {
+    redirect("/login/totp?error=code");
+  }
+  await clearTotpChallenge();
+  await createSession(user.id);
+  await audit({ userId: user.id, action: "login", entity: "User", entityId: user.id }).catch((error) => {
+    logSafe("login-audit", error);
+  });
+  redirect(user.role === "ADMIN" ? "/admin" : "/dashboard");
 }
 
 export async function logoutAction() {

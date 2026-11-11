@@ -14,11 +14,13 @@ export default async function Signup({ searchParams }: { searchParams: Promise<{
             <p className="sans mt-2 text-sm text-red-800">
               {error === "rate"
                 ? "Too many attempts."
-                : error === "exists"
-                  ? "An account with that email already exists."
-                  : error === "db"
-                    ? "Server database is unavailable. Please try again."
-                    : "Check your name, email, and password (8+ characters)."}
+                : error === "unavailable"
+                  ? "Sign-up is temporarily unavailable."
+                  : error === "exists"
+                    ? "An account with that email already exists."
+                    : error === "db"
+                      ? "Server database is unavailable. Please try again."
+                      : "Check your name, email, and password (8+ characters)."}
             </p>
           ) : null}
           <form action={signupAction} className="mt-6 space-y-3">

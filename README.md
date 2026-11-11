@@ -115,8 +115,7 @@ Signed-in users can export or delete their account at `/account`.
 - Official CBDT *business* validation rules PDF is referenced, not executed as a rules engine (JSON Schema + our deterministic rules are applied).
 - 44AE vehicles UI is partial.
 - ITR-4 JSON is the supported download. ITR-3 JSON stays disabled in production unless `ITR3_JSON_ENABLED=true`.
-- Section 234A uses the JSON generation date as the intended filing date.
-- Two-factor authentication is not implemented.
+- Section 234A uses the filing date chosen on the JSON page.
 - Without `GOOGLE_VISION_API_KEY`, scanned files stay in manual review and are not auto-filed.
 - No portal filing. Re-check the official schema on the Income Tax downloads page before a filing window.
 

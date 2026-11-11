@@ -28,9 +28,11 @@ export default async function Login({ searchParams }: { searchParams: Promise<{ 
                 ? "Google sign-in could not be completed. Please try again."
                 : error === "rate"
                   ? "Too many attempts."
-                  : error === "db"
-                    ? "Server database is unavailable. Please try again."
-                    : "Invalid email or password."}
+                  : error === "unavailable"
+                    ? "Sign-in is temporarily unavailable."
+                    : error === "db"
+                      ? "Server database is unavailable. Please try again."
+                      : "Invalid email or password."}
             </p>
           ) : null}
           <Link href="/api/auth/google" className="mt-6 block">
