@@ -9,6 +9,8 @@ import { canGenerateItrJson } from "@/lib/itr-json/mapper";
 import { mkdir, writeFile } from "fs/promises";
 import path from "path";
 import { getUserAccess, jsonExportUpgradePath } from "@/lib/plan";
+import { limitRequest } from "@/lib/rate-limit";
+import { filingInstant } from "@/lib/totp";
 
 export async function generateJsonAction(formData: FormData) {
   const session = await getSession();
@@ -16,10 +18,14 @@ export async function generateJsonAction(formData: FormData) {
   const id = String(formData.get("returnId") || "");
   const ret = await prisma.taxReturn.findFirst({ where: { id, userId: session.userId } });
   if (!ret || !canAccessReturn(ret.userId, session)) redirect("/dashboard");
+  const limited = await limitRequest(`json:${session.userId}`, 10, 600_000);
+  if (!limited.ok) redirect(limited.shared ? `/returns/${id}/json?error=rate` : `/returns/${id}/json?error=unavailable`);
   const access = await getUserAccess(session.userId);
   if (!access.isPro) redirect(jsonExportUpgradePath(id));
+  const generatedAt = filingInstant(String(formData.get("filingDate") || ""));
+  if (!generatedAt) redirect(`/returns/${id}/json?error=date`);
   const gate = await canGenerateItrJson(id, {
-    generatedAt: new Date(),
+    generatedAt,
     ownerUserId: session.role === "ADMIN" ? undefined : session.userId,
   });
   if (gate.error === "empty" || !gate.data) redirect("/dashboard");

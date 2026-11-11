@@ -130,6 +130,30 @@ export function signS3(input: {
   };
 }
 
+export function presignS3Get(config: S3Config, key: string, ttlSeconds: number, now = new Date()) {
+  assertPrivateKey(key);
+  const ttl = Math.min(Math.max(Math.floor(ttlSeconds) || 60, 1), 3600);
+  const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, "");
+  const dateStamp = amzDate.slice(0, 8);
+  const scope = `${dateStamp}/${config.region}/s3/aws4_request`;
+  const url = objectUrl(config, key);
+  const params = new URLSearchParams({
+    "X-Amz-Algorithm": "AWS4-HMAC-SHA256",
+    "X-Amz-Credential": `${config.accessKey}/${scope}`,
+    "X-Amz-Date": amzDate,
+    "X-Amz-Expires": String(ttl),
+    "X-Amz-SignedHeaders": "host",
+  });
+  params.sort();
+  const canonical = ["GET", url.pathname, params.toString(), `host:${url.host}\n`, "host", "UNSIGNED-PAYLOAD"].join("\n");
+  const stringToSign = ["AWS4-HMAC-SHA256", amzDate, scope, sha256Hex(canonical)].join("\n");
+  const signingKey = hmac(hmac(hmac(hmac(`AWS4${config.secretKey}`, dateStamp), config.region), "s3"), "aws4_request");
+  const signature = createHmac("sha256", signingKey).update(stringToSign).digest("hex");
+  params.set("X-Amz-Signature", signature);
+  url.search = params.toString();
+  return url.toString();
+}
+
 function objectUrl(config: S3Config, key: string) {
   assertPrivateKey(key);
   const encoded = key.split("/").map(encodeURIComponent).join("/");
@@ -178,8 +202,8 @@ export class S3Storage implements StorageProvider {
   async delete(key: string) {
     await this.#call("DELETE", key, Buffer.alloc(0));
   }
-  async signedUrl() {
-    return "";
+  async signedUrl(key: string, ttlSeconds: number) {
+    return presignS3Get(this.#config, key, ttlSeconds);
   }
 }
 

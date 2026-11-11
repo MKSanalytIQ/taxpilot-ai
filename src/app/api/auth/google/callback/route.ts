@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { createSession, hashPassword } from "@/lib/auth";
+import { createSession, createTotpChallenge, hashPassword } from "@/lib/auth";
 import { audit } from "@/lib/audit";
 import {
   GOOGLE_STATE_COOKIE,
@@ -36,10 +36,15 @@ export async function GET(request: NextRequest) {
       userId: request.nextUrl.searchParams.get("userId") || "",
     });
     if (!result.ok) return fail(request);
-    await createSession(result.userId);
-    await audit({ userId: result.userId, action: "login", entity: "User", entityId: result.userId }).catch(() => undefined);
     const origin = googleAppOrigin(request.nextUrl.origin);
     if (!origin) return fail(request);
+    const user = await prisma.user.findUnique({ where: { id: result.userId }, select: { totpEnabled: true } });
+    if (user?.totpEnabled) {
+      await createTotpChallenge(result.userId);
+      return NextResponse.redirect(new URL("/login/totp", origin));
+    }
+    await createSession(result.userId);
+    await audit({ userId: result.userId, action: "login", entity: "User", entityId: result.userId }).catch(() => undefined);
     return NextResponse.redirect(new URL("/dashboard", origin));
   } catch {
     return fail(request);

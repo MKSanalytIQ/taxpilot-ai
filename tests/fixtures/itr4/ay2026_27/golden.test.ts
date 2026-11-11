@@ -21,7 +21,7 @@ describe("golden ITR-4 AY 2026-27 fixtures", () => {
       const expectedTax = JSON.parse(readFileSync(path.join(dir, "expectedTax.json"), "utf8"));
       const expectedValidation = JSON.parse(readFileSync(path.join(dir, "expectedValidation.json"), "utf8"));
       const g = generateITRJson(input, { generatedAt: frozen, returnId: "fixture" });
-      const calc = TaxEngine.calculate(input);
+      const calc = TaxEngine.calculate(input, frozen);
       const gate = evaluateFilingGate(input, "fixture", frozen);
       expect(g.official.schemaMode).toBe("OfficialSchema");
       if (expected) {

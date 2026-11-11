@@ -13,7 +13,10 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   if (!canAccessDocument(doc.userId, session)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   let bytes: Buffer;
   try {
-    bytes = await getStorage().get(doc.storageKey);
+    const storage = getStorage();
+    const signed = await storage.signedUrl(doc.storageKey, 60);
+    if (signed) return NextResponse.redirect(signed);
+    bytes = await storage.get(doc.storageKey);
   } catch {
     return NextResponse.json({ error: "Document storage is unavailable." }, { status: 503 });
   }

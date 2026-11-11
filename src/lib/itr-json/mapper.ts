@@ -49,6 +49,15 @@ export function generateITRJson(
       section: "Conflicts",
     });
   }
+  if (gate.itr3Blocked) {
+    errors.push({
+      severity: "ERROR",
+      code: "ITR3_JSON_DISABLED",
+      message: "ITR-3 JSON download is not enabled for this deployment. ITR-4 remains the filing path.",
+      field: "ITR3_JSON_DISABLED",
+      section: "Unsupported scenario",
+    });
+  }
   if (!gate.integrity.ok) {
     errors.push({
       severity: "ERROR",

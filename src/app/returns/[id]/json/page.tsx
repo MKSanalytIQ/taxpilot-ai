@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 import { notFound, redirect } from "next/navigation";
 import { SiteHeader } from "@/components/site-header";
 import { ReturnNav } from "@/components/return-nav";
-import { Button, Card, Disclaimer } from "@/components/ui";
+import { Button, Card, Disclaimer, Input, Label } from "@/components/ui";
 import { generateJsonAction } from "@/app/json-actions";
 import { canGenerateItrJson } from "@/lib/itr-json/mapper";
 import Link from "next/link";
@@ -66,8 +66,13 @@ export default async function JsonPage({ params }: { params: Promise<{ id: strin
                 </Link>
               </Card>
             ) : access.isPro ? (
-              <form action={generateJsonAction} className="mt-6">
+              <form action={generateJsonAction} className="mt-6 space-y-3">
                 <input type="hidden" name="returnId" value={id} />
+                <div>
+                  <Label>Filing date</Label>
+                  <Input name="filingDate" type="date" required defaultValue={new Date().toISOString().slice(0, 10)} />
+                  <p className="sans mt-1 text-xs text-[#5c6773]">Section 234A uses this date. Set it to the day you will upload the JSON.</p>
+                </div>
                 <Button type="submit">Generate ITR JSON</Button>
               </form>
             ) : (
@@ -86,6 +91,8 @@ export default async function JsonPage({ params }: { params: Promise<{ id: strin
             ) : null}
             <p className="sans mt-6 text-sm text-[#5c6773]">
               This file is prepared for upload through the Income Tax Department’s applicable filing workflow. TaxPilot AI does not itself file the return.
+              Section 234A uses the filing date you choose when generating this file.
+              {ret.itrType === "ITR-3" ? " ITR-3 JSON is not enabled for this deployment unless the operator turns it on. 44AE, non-112A capital gains, and loss carry-forward stay blocked." : ""}
             </p>
             <div className="mt-6">
               <Disclaimer />

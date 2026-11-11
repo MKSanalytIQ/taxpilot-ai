@@ -9,6 +9,7 @@ import { validateITR3Json, validateITR4Json } from "@/lib/itr-json/validator/off
 import { mapItr4Official } from "@/lib/itr-json/ay2026_27/itr4/mapper";
 import { auditITR4Mapping, type MappingAudit } from "@/lib/itr-json/ay2026_27/itr4/auditMapping";
 import { collectItr3MappingIssues, mapItr3Official, type Itr3MapIssue } from "@/lib/itr-json/ay2026_27/itr3/mapper";
+import { itr3JsonEnabled } from "@/lib/production";
 import type { OfficialValidationResult } from "@/lib/itr-json/validator/validationTypes";
 
 export type LayerResult = "PASS" | "FAIL";
@@ -141,7 +142,8 @@ export function evaluateFilingGate(
     layers.schema === "PASS" &&
     layers.mapping === "PASS";
   const conflictBlock = openDocumentConflicts > 0;
-  const ready = layersReady && !conflictBlock;
+  const itr3Blocked = data.itrType === "ITR-3" && !itr3JsonEnabled();
+  const ready = layersReady && !conflictBlock && !itr3Blocked;
   return {
     ready,
     layers,
@@ -152,9 +154,10 @@ export function evaluateFilingGate(
     business,
     calc,
     official,
-    json: conflictBlock ? null : json,
+    json: conflictBlock || itr3Blocked ? null : json,
     mapping,
     mappingIssues: itr3Issues,
     openDocumentConflicts,
+    itr3Blocked,
   };
 }
