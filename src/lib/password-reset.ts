@@ -213,7 +213,7 @@ export async function requestPasswordResetWith(
 export async function completePasswordResetWith(
   store: PasswordResetStore,
   input: { token: string; newPassword: string; confirmPassword: string },
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<{ ok: true; userId: string } | { ok: false; error: string }> {
   if (!input.token) return { ok: false, error: INVALID_TOKEN_MESSAGE };
   if (input.newPassword !== input.confirmPassword) {
     return { ok: false, error: "Passwords do not match." };
@@ -235,7 +235,7 @@ export async function completePasswordResetWith(
       passwordHash: hashedPassword,
     });
     if (!committed) return { ok: false, error: INVALID_TOKEN_MESSAGE };
-    return { ok: true };
+    return { ok: true, userId: row.userId };
   } catch {
     return { ok: false, error: INVALID_TOKEN_MESSAGE };
   }

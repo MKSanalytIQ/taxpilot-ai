@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import type { PrismaClient } from "@prisma/client";
 import { PLAN_PRO } from "./plan";
 import {
   PAYMENT_UNAVAILABLE,
@@ -338,16 +339,15 @@ export type WebhookStore = {
   findByOrderId(orderId: string): Promise<PaymentRecord | null>;
   completePaidPro(paymentId: string, userId: string): Promise<void>;
   markStatus(id: string, status: string): Promise<void>;
-  hasOtherPaid(userId: string, exceptPaymentId: string): Promise<boolean>;
-  deactivatePro(userId: string): Promise<void>;
+  settleRefund(paymentId: string, userId: string): Promise<void>;
 };
 
-/** Idempotent. A repeated event does not create another payment or re-upgrade a refund. */
+/** Idempotent. A paid retry repairs a subscription the first attempt left inactive. */
 export async function applyRazorpayWebhook(store: WebhookStore, decision: Exclude<RazorpayWebhookDecision, { action: "ignore" }>) {
   const payment = await store.findByOrderId(decision.orderId);
   if (!payment || payment.provider !== PAYMENT_PROVIDER) return;
   if (decision.action === "paid") {
-    if (payment.status === PAYMENT_STATUS_PAID || payment.status === PAYMENT_STATUS_REFUNDED) return;
+    if (payment.status === PAYMENT_STATUS_REFUNDED) return;
     if (decision.amount == null || decision.amount !== payment.amount) return;
     await store.completePaidPro(payment.id, payment.userId);
     return;
@@ -357,50 +357,38 @@ export async function applyRazorpayWebhook(store: WebhookStore, decision: Exclud
     await store.markStatus(payment.id, PAYMENT_STATUS_FAILED);
     return;
   }
-  if (payment.status === PAYMENT_STATUS_REFUNDED) return;
-  await store.markStatus(payment.id, PAYMENT_STATUS_REFUNDED);
-  if (!(await store.hasOtherPaid(payment.userId, payment.id))) await store.deactivatePro(payment.userId);
+  await store.settleRefund(payment.id, payment.userId);
 }
 
-export function prismaWebhookStore(prisma: {
-  payment: {
-    findFirst: (args: { where: { provider: string; providerRef: string } }) => Promise<PaymentRecord | null>;
-    findMany: (args: { where: { userId: string; status: string; id: { not: string } }; select: { id: true } }) => Promise<{ id: string }[]>;
-    update: (args: { where: { id: string }; data: { status: string } }) => Promise<PaymentRecord>;
-  };
-  subscription: {
-    upsert: (args: {
-      where: { userId: string };
-      create: { userId: string; plan: string; status: string; billingProvider: string };
-      update: { plan: string; status: string; billingProvider: string };
-    }) => Promise<unknown>;
-  };
-}): WebhookStore {
+export function prismaWebhookStore(prisma: PrismaClient): WebhookStore {
   return {
     findByOrderId: (orderId) => prisma.payment.findFirst({ where: { provider: PAYMENT_PROVIDER, providerRef: orderId } }),
     completePaidPro: async (paymentId, userId) => {
-      await prisma.payment.update({ where: { id: paymentId }, data: { status: PAYMENT_STATUS_PAID } });
-      await prisma.subscription.upsert({
-        where: { userId },
-        create: { userId, plan: PLAN_PRO, status: "ACTIVE", billingProvider: PAYMENT_PROVIDER },
-        update: { plan: PLAN_PRO, status: "ACTIVE", billingProvider: PAYMENT_PROVIDER },
-      });
+      await prisma.$transaction([
+        prisma.payment.update({ where: { id: paymentId }, data: { status: PAYMENT_STATUS_PAID } }),
+        prisma.subscription.upsert({
+          where: { userId },
+          create: { userId, plan: PLAN_PRO, status: "ACTIVE", billingProvider: PAYMENT_PROVIDER },
+          update: { plan: PLAN_PRO, status: "ACTIVE", billingProvider: PAYMENT_PROVIDER },
+        }),
+      ]);
     },
     markStatus: async (id, status) => {
       await prisma.payment.update({ where: { id }, data: { status } });
     },
-    hasOtherPaid: async (userId, exceptPaymentId) => {
-      const rows = await prisma.payment.findMany({
-        where: { userId, status: PAYMENT_STATUS_PAID, id: { not: exceptPaymentId } },
-        select: { id: true },
-      });
-      return rows.length > 0;
-    },
-    deactivatePro: async (userId) => {
-      await prisma.subscription.upsert({
-        where: { userId },
-        create: { userId, plan: "FREE", status: "ACTIVE", billingProvider: "NONE" },
-        update: { plan: "FREE", status: "ACTIVE", billingProvider: "NONE" },
+    settleRefund: async (paymentId, userId) => {
+      await prisma.$transaction(async (tx) => {
+        await tx.payment.update({ where: { id: paymentId }, data: { status: PAYMENT_STATUS_REFUNDED } });
+        const others = await tx.payment.count({
+          where: { userId, status: PAYMENT_STATUS_PAID, id: { not: paymentId } },
+        });
+        if (others === 0) {
+          await tx.subscription.upsert({
+            where: { userId },
+            create: { userId, plan: "FREE", status: "ACTIVE", billingProvider: "NONE" },
+            update: { plan: "FREE", status: "ACTIVE", billingProvider: "NONE" },
+          });
+        }
       });
     },
   };

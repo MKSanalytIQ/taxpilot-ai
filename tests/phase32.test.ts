@@ -3,6 +3,7 @@ import { generateITRJson } from "@/lib/itr-json/mapper";
 import { fixtures } from "@/lib/tax/fixtures";
 import { applyConflictResolution } from "@/lib/documents/conflicts";
 import { isAllowedUpload, isXlsxContainer, sniffMime } from "@/lib/documents/magic";
+import { writeXlsxSheet } from "@/lib/documents/xlsx-sheet";
 
 const frozen = new Date("2026-08-26T00:00:00.000Z");
 
@@ -57,11 +58,10 @@ describe("JSON generation gate — document conflicts", () => {
 
 describe("XLSX upload validation", () => {
   it("accepts a real XLSX container and rejects a renamed non-XLSX file", async () => {
-    const XLSX = await import("xlsx");
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["Date", "Narration"], ["2025-04-01", "ok"]]), "Sheet1");
-    const written = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
-    const valid = Buffer.isBuffer(written) ? written : Buffer.from(written as ArrayBuffer);
+    const valid = writeXlsxSheet([
+      ["Date", "Narration"],
+      ["2025-04-01", "ok"],
+    ]);
     expect(isXlsxContainer(valid)).toBe(true);
     expect(sniffMime(valid, "stmt.xlsx", "application/octet-stream")).toBe(
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

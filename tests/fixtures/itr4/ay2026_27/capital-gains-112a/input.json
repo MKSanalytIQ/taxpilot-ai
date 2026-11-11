@@ -63,5 +63,14 @@
       "bankName": "HDFC Bank",
       "accountType": "SB"
     }
-  ]
+  ],
+  "eligibilityConfirmed": {
+    "lotteryOrRacehorse": false,
+    "foreignAssets": false,
+    "unlistedShares": false,
+    "fnoTrading": false,
+    "isDirector": false,
+    "isLlp": false,
+    "agriculturalIncome": 0
+  }
 }

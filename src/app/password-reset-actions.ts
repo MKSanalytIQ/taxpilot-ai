@@ -4,6 +4,8 @@ import { redirect, unstable_rethrow } from "next/navigation";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/db";
 import { clearSession, hashPassword } from "@/lib/auth";
+import { passwordSessionStamp } from "@/lib/session-stamp";
+import { publishSessionStamp } from "@/lib/session-revocation";
 import { requestPasswordResetWith, completePasswordResetWith, prismaPasswordResetStore, RESET_UNAVAILABLE_MESSAGE } from "@/lib/password-reset";
 import { limitRequest } from "@/lib/rate-limit";
 import { logSafe } from "@/lib/production";
@@ -51,6 +53,8 @@ export async function completePasswordResetAction(formData: FormData) {
       if (code === "invalid" || !token) redirect("/reset-password?error=invalid");
       redirect(`/reset-password?token=${encodeURIComponent(token)}&error=${code}`);
     }
+    const user = await prisma.user.findUnique({ where: { id: result.userId }, select: { passwordHash: true } });
+    if (user) await publishSessionStamp(result.userId, passwordSessionStamp(user.passwordHash));
     await clearSession();
   } catch (error) {
     rethrowControl(error);

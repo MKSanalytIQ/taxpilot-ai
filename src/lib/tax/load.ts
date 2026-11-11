@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { json } from "@/lib/utils";
+import { confirmationsFromAnswers } from "./confirmations";
 import type { NormalizedReturn } from "./model";
 
 export async function loadNormalized(returnId: string, userId?: string): Promise<NormalizedReturn | null> {
@@ -17,6 +18,7 @@ export async function loadNormalized(returnId: string, userId?: string): Promise
       taxPayments: true,
       bankAccounts: true,
       profitLoss: true,
+      questions: { include: { answers: true } },
       user: { include: { profile: true } },
     },
   });
@@ -26,6 +28,12 @@ export async function loadNormalized(returnId: string, userId?: string): Promise
   const prof = ret.professional[0];
   const pl = ret.profitLoss;
   const booksFromPl = Boolean(pl && (pl.revenue || pl.netProfit));
+  const answers: Record<string, string | undefined> = {};
+  for (const question of ret.questions) {
+    const latest = [...question.answers].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()).at(-1);
+    if (latest?.value) answers[question.code] = latest.value;
+  }
+  const incomeSources = json<string[]>(ret.incomeSourcesJson, []);
   return {
     assessmentYear: ret.assessmentYear,
     itrType: (ret.itrType as NormalizedReturn["itrType"]) || "UNDETERMINED",
@@ -123,6 +131,8 @@ export async function loadNormalized(returnId: string, userId?: string): Promise
       bankName: b.bankName,
       accountType: b.accountType,
     })),
+    incomeSources,
+    eligibilityConfirmed: confirmationsFromAnswers(answers),
   };
 }
 

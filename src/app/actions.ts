@@ -424,7 +424,6 @@ export async function saveDeductionsAction(formData: FormData) {
   const id = String(formData.get("returnId") || "");
   const ret = await prisma.taxReturn.findFirst({ where: { id, userId: session.userId } });
   if (!ret) redirect("/dashboard");
-  await prisma.deduction.deleteMany({ where: { returnId: id } });
   const parentsSenior = String(formData.get("parentsSenior") || "") === "Y";
   const rows: Array<{ section: string; amount: number; notes?: string }> = [
     { section: "80C", amount: n(String(formData.get("80C"))) },
@@ -440,10 +439,11 @@ export async function saveDeductionsAction(formData: FormData) {
     { section: "80TTA", amount: n(String(formData.get("80TTA"))) },
     { section: "80TTB", amount: n(String(formData.get("80TTB"))) },
   ];
-  for (const row of rows) {
-    if (!row.amount) continue;
-    await prisma.deduction.create({ data: { returnId: id, section: row.section, amount: row.amount, notes: row.notes || "" } });
-  }
+  await prisma.$transaction(async (tx) => {
+    await tx.deduction.deleteMany({ where: { returnId: id } });
+    const data = rows.filter((row) => row.amount).map((row) => ({ returnId: id, section: row.section, amount: row.amount, notes: row.notes || "" }));
+    if (data.length) await tx.deduction.createMany({ data });
+  });
   await recomputeReturn(id);
   redirect(`/returns/${id}/tds`);
 }
@@ -454,57 +454,52 @@ export async function saveTdsBankAction(formData: FormData) {
   const id = String(formData.get("returnId") || "");
   const ret = await prisma.taxReturn.findFirst({ where: { id, userId: session.userId } });
   if (!ret) redirect("/dashboard");
-  await prisma.tDSEntry.deleteMany({ where: { returnId: id } });
-  await prisma.taxPayment.deleteMany({ where: { returnId: id } });
-  await prisma.bankAccount.deleteMany({ where: { returnId: id } });
-  if (n(String(formData.get("tdsAmount")))) {
-    await prisma.tDSEntry.create({
-      data: {
-        returnId: id,
-        sectionCode: String(formData.get("tdsSection") || "194A"),
-        tan: String(formData.get("tdsTan") || "").toUpperCase(),
-        deductorName: String(formData.get("tdsName") || ""),
-        amount: n(String(formData.get("tdsAmount"))),
-      },
-    });
-  }
-  if (n(String(formData.get("advanceTax")))) {
-    const paidOn = String(formData.get("advanceTaxDate") || "");
-    await prisma.taxPayment.create({
-      data: {
-        returnId: id,
-        kind: "ADVANCE",
-        amount: n(String(formData.get("advanceTax"))),
-        paidOn: paidOn ? new Date(paidOn) : undefined,
-      },
-    });
-  }
-  if (n(String(formData.get("selfAsst")))) {
-    const paidOn = String(formData.get("selfAsstDate") || "");
-    await prisma.taxPayment.create({
-      data: {
-        returnId: id,
-        kind: "SELF_ASSESSMENT",
-        amount: n(String(formData.get("selfAsst"))),
-        paidOn: paidOn ? new Date(paidOn) : undefined,
-      },
-    });
-  }
+  const tdsAmount = n(String(formData.get("tdsAmount")));
+  const advanceTax = n(String(formData.get("advanceTax")));
+  const selfAsst = n(String(formData.get("selfAsst")));
   const ifsc = String(formData.get("ifsc") || "").toUpperCase().trim();
   const accountNumber = String(formData.get("accountNumber") || "").trim();
   const bankName = String(formData.get("bankName") || "").trim();
-  if (ifsc || accountNumber) {
-    await prisma.bankAccount.create({
-      data: {
-        returnId: id,
-        ifsc,
-        accountNumber,
-        bankName,
-        accountType: String(formData.get("accountType") || "SB"),
-        isPrimary: true,
-      },
-    });
-  }
+  await prisma.$transaction(async (tx) => {
+    await tx.tDSEntry.deleteMany({ where: { returnId: id } });
+    await tx.taxPayment.deleteMany({ where: { returnId: id } });
+    await tx.bankAccount.deleteMany({ where: { returnId: id } });
+    if (tdsAmount) {
+      await tx.tDSEntry.create({
+        data: {
+          returnId: id,
+          sectionCode: String(formData.get("tdsSection") || "194A"),
+          tan: String(formData.get("tdsTan") || "").toUpperCase(),
+          deductorName: String(formData.get("tdsName") || ""),
+          amount: tdsAmount,
+        },
+      });
+    }
+    if (advanceTax) {
+      const paidOn = String(formData.get("advanceTaxDate") || "");
+      await tx.taxPayment.create({
+        data: { returnId: id, kind: "ADVANCE", amount: advanceTax, paidOn: paidOn ? new Date(paidOn) : undefined },
+      });
+    }
+    if (selfAsst) {
+      const paidOn = String(formData.get("selfAsstDate") || "");
+      await tx.taxPayment.create({
+        data: { returnId: id, kind: "SELF_ASSESSMENT", amount: selfAsst, paidOn: paidOn ? new Date(paidOn) : undefined },
+      });
+    }
+    if (ifsc || accountNumber) {
+      await tx.bankAccount.create({
+        data: {
+          returnId: id,
+          ifsc,
+          accountNumber,
+          bankName,
+          accountType: String(formData.get("accountType") || "SB"),
+          isPrimary: true,
+        },
+      });
+    }
+  });
   await recomputeReturn(id);
   redirect(`/returns/${id}/validate`);
 }

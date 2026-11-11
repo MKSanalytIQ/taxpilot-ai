@@ -7,6 +7,7 @@ import { extractForm16, form16Reconciliation } from "./extractors/form16";
 import { mergeFallbackFields, parseAiExtraction, shouldUseAiFallback } from "./fallback";
 import { sniffMime } from "./magic";
 import { extractPages } from "./text";
+import { DocumentLimitError } from "./limits";
 import {
   EXTRACTION_BUNDLE_VERSION,
   PROMPT_VERSION,
@@ -77,7 +78,18 @@ export async function runExtraction(
   const ocr = hooks.ocr ?? getOcrProvider();
   const ai = hooks.ai ?? getDocumentAIProvider();
   const mime = sniffMime(input.bytes, input.fileName, input.mimeType);
-  let pages = await extractPages(input.bytes, mime, input.fileName);
+  let pages: PdfPage[];
+  try {
+    pages = await extractPages(input.bytes, mime, input.fileName);
+  } catch (error) {
+    if (error instanceof DocumentLimitError) {
+      return emptyResult(classifyDocument(input.fileName, "", input.declaredKind), [], {
+        errorCode: "MANUAL_REVIEW_REQUIRED",
+        errorMessage: "This PDF exceeds the page limit. Enter the values manually.",
+      });
+    }
+    throw error;
+  }
   let text = pages.map((p) => p.text).join(" ");
   const kind = classifyDocument(input.fileName, text, input.declaredKind);
   let usedOcr = false;
@@ -116,11 +128,22 @@ export async function runExtraction(
   }
 
   if (kind === "BANK_STATEMENT") {
-    if (mime.includes("spreadsheet") || /\.xlsx$/i.test(input.fileName)) {
-      const transactions = await extractBankXlsx(input.bytes);
-      return emptyResult(kind, pages, { transactions, usedOcr });
+    try {
+      if (mime.includes("spreadsheet") || /\.xlsx$/i.test(input.fileName)) {
+        const transactions = await extractBankXlsx(input.bytes);
+        return emptyResult(kind, pages, { transactions, usedOcr });
+      }
+      return emptyResult(kind, pages, { transactions: extractBankCsv(text), usedOcr });
+    } catch (error) {
+      if (error instanceof DocumentLimitError) {
+        return emptyResult(kind, pages, {
+          usedOcr,
+          errorCode: "MANUAL_REVIEW_REQUIRED",
+          errorMessage: "This spreadsheet exceeds the row limit. Enter the values manually.",
+        });
+      }
+      throw error;
     }
-    return emptyResult(kind, pages, { transactions: extractBankCsv(text), usedOcr });
   }
 
   if (!PRIORITY.includes(kind) && kind !== "FORM_16" && kind !== "AIS" && kind !== "TIS") {

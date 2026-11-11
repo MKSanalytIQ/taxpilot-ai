@@ -6,6 +6,7 @@ import { getOcrProvider } from "@/lib/providers/ocr";
 import { rebuildDocumentConflicts } from "./conflicts";
 import { extractionConfigKey, shouldReuseExtraction } from "./fallback";
 import { runExtraction } from "./pipeline";
+import { DocumentLimitError, withDeadline } from "./limits";
 import { pageRef } from "./rupees";
 import { normalizedTaxField } from "./mapping";
 import {
@@ -306,11 +307,29 @@ export async function persistExtraction(opts: {
     }
   }
 
-  const result = await runExtraction({
-    bytes: opts.bytes,
-    fileName: opts.fileName,
-    mimeType: opts.mimeType,
-    declaredKind: opts.declaredKind,
-  });
+  let result: Awaited<ReturnType<typeof runExtraction>>;
+  try {
+    result = await withDeadline(
+      runExtraction({
+        bytes: opts.bytes,
+        fileName: opts.fileName,
+        mimeType: opts.mimeType,
+        declaredKind: opts.declaredKind,
+      }),
+    );
+  } catch (error) {
+    if (!(error instanceof DocumentLimitError)) throw error;
+    result = {
+      kind: (opts.declaredKind as ExtractionResult["kind"]) || "OTHER",
+      pages: [],
+      fields: [],
+      transactions: [],
+      aisTransactions: [],
+      warnings: [],
+      extractorVersion: EXTRACTION_BUNDLE_VERSION,
+      errorCode: "MANUAL_REVIEW_REQUIRED",
+      errorMessage: "Document processing exceeded the time limit. Enter the values manually.",
+    };
+  }
   return writeResult({ ...opts, result, cached: false, config });
 }

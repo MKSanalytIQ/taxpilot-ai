@@ -5,9 +5,40 @@ type Source = string;
 
 const DEFAULT_OPTIONS = ["Yes", "No", "Not sure"];
 
-export async function seedInterview(returnId: string, sources: Source[]) {
-  const existing = await prisma.question.count({ where: { returnId } });
-  if (existing) return;
+const ELIGIBILITY_QUESTIONS: Array<{ code: string; prompt: string; helpText: string; options: string[] }> = [
+  {
+    code: "LOTTERY",
+    prompt: "Did you have lottery winnings or income from owning and maintaining race horses?",
+    helpText: "This income is not allowed in ITR-4. TaxPilot will not assume the answer is No.",
+    options: ["Yes", "No", "Not sure"],
+  },
+  {
+    code: "FOREIGN_ASSETS",
+    prompt: "Did you have foreign assets or foreign income during the year?",
+    helpText: "Foreign assets or income cannot be reported in ITR-4.",
+    options: ["Yes", "No", "Not sure"],
+  },
+  {
+    code: "UNLISTED_SHARES",
+    prompt: "Did you hold unlisted equity shares at any time during the year?",
+    helpText: "Holding unlisted equity shares is not permitted in ITR-4.",
+    options: ["Yes", "No", "Not sure"],
+  },
+  {
+    code: "FNO",
+    prompt: "Did you have futures, options, or other speculative trading income?",
+    helpText: "F&O and speculative trading are reported in ITR-3, not ITR-4.",
+    options: ["Yes", "No", "Not sure"],
+  },
+  {
+    code: "AGRICULTURE",
+    prompt: "Was your agricultural income above ₹5,000?",
+    helpText: "Agricultural income above ₹5,000 is not permitted in ITR-4.",
+    options: ["Yes", "No", "Not sure"],
+  },
+];
+
+export function interviewQuestions(sources: Source[]) {
   const qs: Array<{ code: string; prompt: string; helpText: string; options: string[] }> = [
     {
       code: "RESIDENT",
@@ -21,6 +52,7 @@ export async function seedInterview(returnId: string, sources: Source[]) {
       helpText: "Directors cannot use ITR-4.",
       options: ["Yes", "No", "Not sure"],
     },
+    ...ELIGIBILITY_QUESTIONS,
   ];
   if (sources.includes("PROFESSION") || sources.includes("FREELANCING")) {
     qs.push({
@@ -58,14 +90,24 @@ export async function seedInterview(returnId: string, sources: Source[]) {
     helpText: "We use AIS/26AS only as reconciliation data. Those figures are not assumed to be correct.",
     options: ["Yes", "No", "Not sure"],
   });
+  return qs;
+}
+
+export async function seedInterview(returnId: string, sources: Source[]) {
+  const qs = interviewQuestions(sources);
+  const existing = await prisma.question.findMany({ where: { returnId }, select: { code: true, sortOrder: true } });
+  const have = new Set(existing.map((question) => question.code));
+  const missing = qs.filter((question) => !have.has(question.code));
+  if (!missing.length) return;
+  const start = existing.reduce((max, question) => Math.max(max, question.sortOrder), -1) + 1;
   await prisma.question.createMany({
-    data: qs.map((q, i) => ({
+    data: missing.map((question, index) => ({
       returnId,
-      code: q.code,
-      prompt: q.prompt,
-      helpText: q.helpText,
-      optionsJson: JSON.stringify(q.options),
-      sortOrder: i,
+      code: question.code,
+      prompt: question.prompt,
+      helpText: question.helpText,
+      optionsJson: JSON.stringify(question.options),
+      sortOrder: start + index,
     })),
   });
 }
