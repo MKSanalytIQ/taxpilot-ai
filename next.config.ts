@@ -25,6 +25,12 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  experimental: {
+    serverActions: {
+      // Slightly above the 12MiB upload check so a valid file reaches that check.
+      bodySizeLimit: "14mb",
+    },
+  },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

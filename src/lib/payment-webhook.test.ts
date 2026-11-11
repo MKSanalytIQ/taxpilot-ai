@@ -16,7 +16,7 @@ function memoryStore(seed: PaymentRecord[]) {
   const rows = seed.map((row) => ({ ...row }));
   const status = new Map(rows.map((row) => [row.id, row.status]));
   const pro = new Set<string>();
-  const calls = { paid: 0 };
+  const calls = { paid: 0, refunds: 0 };
   const store: WebhookStore = {
     async findByOrderId(orderId) {
       const row = rows.find((item) => item.providerRef === orderId) || null;
@@ -31,11 +31,11 @@ function memoryStore(seed: PaymentRecord[]) {
     async markStatus(id, next) {
       status.set(id, next);
     },
-    async hasOtherPaid(userId, exceptPaymentId) {
-      return rows.some((row) => row.userId === userId && row.id !== exceptPaymentId && status.get(row.id) === PAYMENT_STATUS_PAID);
-    },
-    async deactivatePro(userId) {
-      pro.delete(userId);
+    async settleRefund(paymentId, userId) {
+      calls.refunds += 1;
+      status.set(paymentId, PAYMENT_STATUS_REFUNDED);
+      const otherPaid = rows.some((row) => row.userId === userId && row.id !== paymentId && status.get(row.id) === PAYMENT_STATUS_PAID);
+      if (!otherPaid) pro.delete(userId);
     },
   };
   return { store, status, pro, calls };
@@ -68,13 +68,21 @@ describe("Razorpay webhook", () => {
     if (!paid || paid.action !== "paid") throw new Error("expected paid event");
     await applyRazorpayWebhook(store.store, paid);
     await applyRazorpayWebhook(store.store, paid);
-    expect(store.calls.paid).toBe(1);
+    expect(store.calls.paid).toBe(2);
     expect(store.pro.has("user-a")).toBe(true);
+    expect(store.status.get("payrow")).toBe(PAYMENT_STATUS_PAID);
 
     const mismatch = memoryStore([{ ...payment, id: "other", providerRef: "order_2" }]);
     await applyRazorpayWebhook(mismatch.store, { action: "paid", orderId: "order_2", amount: 100 });
     expect(mismatch.calls.paid).toBe(0);
     expect(mismatch.pro.has("user-a")).toBe(false);
+  });
+
+  it("repairs a captured payment whose subscription was not activated", async () => {
+    const store = memoryStore([{ ...payment, status: PAYMENT_STATUS_PAID }]);
+    await applyRazorpayWebhook(store.store, { action: "paid", orderId: "order_1", amount: 49900 });
+    expect(store.calls.paid).toBe(1);
+    expect(store.pro.has("user-a")).toBe(true);
   });
 
   it("records a failed payment without overriding a captured one", async () => {

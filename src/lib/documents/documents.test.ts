@@ -4,6 +4,7 @@ import { join } from "path";
 import { extractForm16, form16Reconciliation } from "./extractors/form16";
 import { extractAis, extractTis } from "./extractors/ais";
 import { classifyBankDescription, extractBankCsv, extractBankXlsx } from "./extractors/bank";
+import { writeXlsxSheet } from "./xlsx-sheet";
 import { runExtraction } from "./pipeline";
 import { reconcileTds } from "./tdsReconcile";
 import { classifyDocument } from "./classify";
@@ -120,6 +121,15 @@ describe("bank CSV", () => {
     expect(classifyBankDescription("random coffee")).toBe("UNKNOWN");
   });
 
+  it("keeps quoted commas and multiline narrations in one cell", () => {
+    const csv = 'Date,Description,Debit,Credit,Balance\n2025-04-01,"UPI to friend, rent",500,0,10000\n2025-04-02,"Salary\nACME",0,80000,90000';
+    const rows = extractBankCsv(csv);
+    expect(rows).toHaveLength(2);
+    expect(rows[0].description).toBe("UPI to friend, rent");
+    expect(rows[0].debit).toBe(500);
+    expect(rows[1].description).toBe("Salary\nACME");
+    expect(rows[1].suggestedCategory).toBe("SALARY");
+  });
   it("accepts alternate CSV headers", () => {
     const csv = "Txn Date,Narration,Withdrawal,Deposit,Balance,Reference\n01-04-2025,NEFT IN,0,25000,25000,UTR1";
     const rows = extractBankCsv(csv);
@@ -132,16 +142,11 @@ describe("bank CSV", () => {
 
 describe("bank XLSX", () => {
   it("parses common bank columns", async () => {
-    const XLSX = await import("xlsx");
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.aoa_to_sheet([
+    const bytes = writeXlsxSheet([
       ["Transaction Date", "Particulars", "Withdrawal", "Deposit", "Balance"],
       ["2025-04-01", "Customer receipt INV-9", "0", "25000", "35000"],
       ["2025-04-02", "UPI coffee", "200", "0", "34800"],
     ]);
-    XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
-    const written = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
-    const bytes = Buffer.isBuffer(written) ? written : Buffer.from(written as ArrayBuffer);
     const rows = await extractBankXlsx(bytes);
     expect(rows).toHaveLength(2);
     expect(rows[0].suggestedCategory).toBe("BUSINESS_RECEIPT");

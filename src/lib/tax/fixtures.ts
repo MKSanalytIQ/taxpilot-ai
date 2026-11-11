@@ -29,6 +29,15 @@ const base = (): NormalizedReturn => ({
   tds: [],
   taxPayments: [],
   bankAccounts: [{ ifsc: "HDFC0001234", accountNumber: "12345678901", isPrimary: true, bankName: "HDFC Bank", accountType: "SB" }],
+  eligibilityConfirmed: {
+    lotteryOrRacehorse: false,
+    foreignAssets: false,
+    unlistedShares: false,
+    fnoTrading: false,
+    isDirector: false,
+    isLlp: false,
+    agriculturalIncome: 0,
+  },
 });
 
 export const fixtures: Record<string, NormalizedReturn> = {

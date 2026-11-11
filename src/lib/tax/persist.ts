@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 import { loadNormalized } from "./load";
 import { TaxEngine } from "./engine";
 import { validateReturn } from "./validation";
-import { determineItrType } from "@/lib/tax-rules/ay2026_27/eligibility";
+import { determineItrType, eligibilityFromNormalized } from "@/lib/tax-rules/ay2026_27/eligibility";
 import { json } from "@/lib/utils";
 import { nextJsonFileStatuses } from "@/lib/json/lifecycle";
 import { verifySchemaIntegrity } from "@/lib/itr-json/schemaIntegrity";
@@ -30,60 +30,29 @@ export async function recomputeReturn(returnId: string) {
     presumptiveAnswer !== "No" && data.business.section !== "BOOKS" && data.profession.section !== "BOOKS";
   const detailedBooks =
     data.business.section === "BOOKS" || data.profession.section === "BOOKS" || presumptiveAnswer === "No";
-  const eligibility = determineItrType({
-    taxpayerType: ret.taxpayerType as "INDIVIDUAL" | "HUF" | "FIRM",
-    residentialStatus: (["RESIDENT", "RNOR", "NRI"].includes(ret.user.profile?.residentialStatus || "")
-      ? (ret.user.profile!.residentialStatus as "RESIDENT" | "RNOR" | "NRI")
-      : ""),
-    isLlp: false,
-    isDirector: directorAnswer === "Yes",
-    sources,
-    totalIncome: 0,
-    housePropertyCount: ret.houseProperties.length,
-    ltcg112A: ret.capitalGains.filter((g) => g.section === "112A").reduce((s, g) => s + g.amount, 0),
-    stcg: ret.capitalGains.filter((g) => g.kind === "STCG").reduce((s, g) => s + g.amount, 0),
-    otherLtcg: ret.capitalGains.filter((g) => g.section !== "112A").reduce((s, g) => s + g.amount, 0),
-    agriculturalIncome: 0,
-    lotteryOrRacehorse: sources.includes("LOTTERY"),
-    foreignAssets: false,
-    unlistedShares: false,
-    businessTurnover: data.business.turnover,
-    businessCash: data.business.cashReceipts,
-    professionReceipts: data.profession.grossReceipts,
-    professionCash: data.profession.cashReceipts,
-    usesPresumptive,
-    detailedBooks,
-    fnoTrading: sources.includes("FNO"),
-  });
+  const eligibilityInput = (totalIncome: number, ltcg112A: number) =>
+    eligibilityFromNormalized(data, {
+      sources,
+      directorAnswer,
+      totalIncome,
+      ltcg112A,
+      housePropertyCount: ret.houseProperties.length,
+      usesPresumptive,
+      detailedBooks,
+    });
+  const eligibility = determineItrType(
+    eligibilityInput(
+      0,
+      ret.capitalGains.filter((g) => g.section === "112A").reduce((s, g) => s + g.amount, 0),
+    ),
+  );
   const calc = TaxEngine.calculate({
     ...data,
     itrType: eligibility.recommended === "UNSUPPORTED" ? "ITR-3" : eligibility.recommended,
   });
-  const eligWithIncome = determineItrType({
-    taxpayerType: ret.taxpayerType as "INDIVIDUAL" | "HUF" | "FIRM",
-    residentialStatus: (["RESIDENT", "RNOR", "NRI"].includes(ret.user.profile?.residentialStatus || "")
-      ? (ret.user.profile!.residentialStatus as "RESIDENT" | "RNOR" | "NRI")
-      : ""),
-    isLlp: false,
-    isDirector: directorAnswer === "Yes",
-    sources,
-    totalIncome: calc.grossTotalIncomeIncLtcg,
-    housePropertyCount: ret.houseProperties.length,
-    ltcg112A: calc.capitalGains,
-    stcg: ret.capitalGains.filter((g) => g.kind === "STCG").reduce((s, g) => s + g.amount, 0),
-    otherLtcg: ret.capitalGains.filter((g) => g.section !== "112A").reduce((s, g) => s + g.amount, 0),
-    agriculturalIncome: 0,
-    lotteryOrRacehorse: false,
-    foreignAssets: false,
-    unlistedShares: false,
-    businessTurnover: data.business.turnover,
-    businessCash: data.business.cashReceipts,
-    professionReceipts: data.profession.grossReceipts,
-    professionCash: data.profession.cashReceipts,
-    usesPresumptive,
-    detailedBooks,
-    fnoTrading: sources.includes("FNO"),
-  });
+  const eligWithIncome = determineItrType(
+    eligibilityInput(calc.grossTotalIncomeIncLtcg, calc.capitalGains),
+  );
   const issues = validateReturn(
     {
       ...data,

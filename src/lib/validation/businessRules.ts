@@ -1,6 +1,6 @@
 import type { NormalizedReturn } from "@/lib/tax/model";
 import { TaxEngine } from "@/lib/tax/engine";
-import { determineItrType } from "@/lib/tax-rules/ay2026_27/eligibility";
+import { determineItrType, eligibilityFromNormalized } from "@/lib/tax-rules/ay2026_27/eligibility";
 import { presumptive44AD, presumptive44ADA } from "@/lib/tax-rules/ay2026_27/presumptive";
 import { evaluateDeductions } from "@/lib/tax-engine/ay2026_27/deductions";
 
@@ -152,34 +152,12 @@ export function businessValidate(data: NormalizedReturn, returnId = ""): Busines
   }
 
   const calc = TaxEngine.calculate(data);
-  const elig = determineItrType({
-    taxpayerType: data.taxpayerType,
-    residentialStatus: data.residentialStatus,
-    isLlp: false,
-    isDirector: false,
-    sources: [
-      data.salary.gross ? "SALARY" : "",
-      data.business.turnover ? "BUSINESS" : "",
-      data.profession.grossReceipts ? "PROFESSION" : "",
-      calc.capitalGains ? "CAPITAL_GAINS" : "",
-    ].filter(Boolean),
-    totalIncome: calc.grossTotalIncomeIncLtcg,
-    housePropertyCount: data.houseProperties.length,
-    ltcg112A: calc.capitalGains,
-    stcg: data.capitalGains.filter((g) => g.kind === "STCG").reduce((s, g) => s + g.amount, 0),
-    otherLtcg: data.capitalGains.filter((g) => g.section !== "112A").reduce((s, g) => s + g.amount, 0),
-    agriculturalIncome: 0,
-    lotteryOrRacehorse: false,
-    foreignAssets: false,
-    unlistedShares: false,
-    businessTurnover: data.business.turnover,
-    businessCash: data.business.cashReceipts,
-    professionReceipts: data.profession.grossReceipts,
-    professionCash: data.profession.cashReceipts,
-    usesPresumptive: data.business.section !== "BOOKS" && data.profession.section !== "BOOKS",
-    detailedBooks: data.business.section === "BOOKS",
-    fnoTrading: false,
-  });
+  const elig = determineItrType(
+    eligibilityFromNormalized(data, {
+      totalIncome: calc.grossTotalIncomeIncLtcg,
+      ltcg112A: calc.capitalGains,
+    }),
+  );
   if (data.itrType === "ITR-4" && !elig.itr4Eligible) {
     for (const r of elig.reasons) {
       push({ id: "ITR4_ELIG_001", severity: "ERROR", field: "itrType", section: "Eligibility", message: r, explanation: "Selected ITR does not match eligibility.", fixRoute: `/returns/${id}/interview` });

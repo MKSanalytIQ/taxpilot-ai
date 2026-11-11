@@ -3,7 +3,7 @@ import { verifyItr3SchemaIntegrity, verifySchemaIntegrity } from "@/lib/itr-json
 import { completenessValidate } from "./completeness";
 import { businessValidate, canGenerateJson } from "./businessRules";
 import { detectUnsupported } from "@/lib/itr-rules/ay2026_27/unsupported";
-import { determineItrType } from "@/lib/tax-rules/ay2026_27/eligibility";
+import { determineItrType, eligibilityFromNormalized } from "@/lib/tax-rules/ay2026_27/eligibility";
 import { TaxEngine } from "@/lib/tax/engine";
 import { validateITR3Json, validateITR4Json } from "@/lib/itr-json/validator/officialValidator";
 import { mapItr4Official } from "@/lib/itr-json/ay2026_27/itr4/mapper";
@@ -34,33 +34,12 @@ export function evaluateFilingGate(
   const completeness = completenessValidate(data, returnId);
   const unsupported = detectUnsupported(data, returnId);
   const calc = TaxEngine.calculate(data, generatedAt);
-  const eligibility = determineItrType({
-    taxpayerType: data.taxpayerType,
-    residentialStatus: data.residentialStatus,
-    isLlp: false,
-    isDirector: false,
-    sources: [
-      data.salary.gross ? "SALARY" : "",
-      data.business.turnover || data.business.digitalReceipts ? "BUSINESS" : "",
-      data.profession.grossReceipts ? "PROFESSION" : "",
-    ].filter(Boolean),
-    totalIncome: calc.grossTotalIncomeIncLtcg,
-    housePropertyCount: data.houseProperties.length,
-    ltcg112A: calc.capitalGains,
-    stcg: data.capitalGains.filter((g) => g.kind === "STCG").reduce((s, g) => s + g.amount, 0),
-    otherLtcg: data.capitalGains.filter((g) => g.section !== "112A" && g.kind !== "LTCG_112A").reduce((s, g) => s + g.amount, 0),
-    agriculturalIncome: 0,
-    lotteryOrRacehorse: false,
-    foreignAssets: false,
-    unlistedShares: false,
-    businessTurnover: data.business.turnover,
-    businessCash: data.business.cashReceipts,
-    professionReceipts: data.profession.grossReceipts,
-    professionCash: data.profession.cashReceipts,
-    usesPresumptive: true,
-    detailedBooks: data.business.section === "BOOKS",
-    fnoTrading: false,
-  });
+  const eligibility = determineItrType(
+    eligibilityFromNormalized(data, {
+      totalIncome: calc.grossTotalIncomeIncLtcg,
+      ltcg112A: calc.capitalGains,
+    }),
+  );
   const business = businessValidate(data, returnId);
   const taxFail =
     calc.totalTax < 0 ||

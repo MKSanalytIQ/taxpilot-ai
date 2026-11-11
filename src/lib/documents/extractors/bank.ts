@@ -1,5 +1,8 @@
 import type { BankRow } from "../types";
 import { parseAmount } from "../rupees";
+import { parseCsv } from "../csv";
+import { DocumentLimitError, MAX_SPREADSHEET_ROWS } from "../limits";
+import { readXlsxSheet } from "../xlsx-sheet";
 
 const UNKNOWN = "UNKNOWN";
 
@@ -33,34 +36,9 @@ function row(desc: string, date: string, debit: number, credit: number, balance:
 }
 
 export function extractBankCsv(text: string): BankRow[] {
-  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-  if (lines.length < 2) return [];
-  const cols = lines[0].split(",").map((c) => c.trim().toLowerCase());
-  const idx = (names: string[]) => cols.findIndex((c) => names.some((n) => c.includes(n)));
-  const iDate = idx(["txn date", "transaction date", "value date", "date"]);
-  const iDesc = idx(["narration", "particular", "description", "desc"]);
-  const iDebit = idx(["withdrawal", "debit"]);
-  const iCredit = idx(["deposit", "credit"]);
-  const iBal = idx(["balance"]);
-  const iRef = idx(["ref", "cheque", "utr"]);
-  if (iDate < 0 || iDesc < 0) return [];
-  const rows: BankRow[] = [];
-  for (const line of lines.slice(1)) {
-    const p = line.split(",").map((x) => x.trim());
-    const desc = p[iDesc] || "";
-    rows.push(
-      row(
-        desc,
-        p[iDate] || "",
-        parseAmount(iDebit >= 0 ? p[iDebit] : "") || 0,
-        parseAmount(iCredit >= 0 ? p[iCredit] : "") || 0,
-        parseAmount(iBal >= 0 ? p[iBal] : "") || 0,
-        iRef >= 0 ? p[iRef] || "" : "",
-        null,
-      ),
-    );
-  }
-  return rows;
+  const matrix = parseCsv(text);
+  if (matrix.length > MAX_SPREADSHEET_ROWS + 1) throw new DocumentLimitError("SPREADSHEET_ROW_LIMIT");
+  return extractBankRows(matrix, null);
 }
 
 export function extractBankRows(matrix: string[][], sourcePage: number | null): BankRow[] {
@@ -93,10 +71,7 @@ export function extractBankRows(matrix: string[][], sourcePage: number | null): 
 }
 
 export async function extractBankXlsx(bytes: Buffer): Promise<BankRow[]> {
-  const XLSX = await import("xlsx");
-  const wb = XLSX.read(bytes, { type: "buffer" });
-  const sheet = wb.Sheets[wb.SheetNames[0]];
-  if (!sheet) return [];
-  const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false }) as string[][];
+  const matrix = readXlsxSheet(bytes, MAX_SPREADSHEET_ROWS + 1);
+  if (matrix.length > MAX_SPREADSHEET_ROWS) throw new DocumentLimitError("SPREADSHEET_ROW_LIMIT");
   return extractBankRows(matrix, null);
 }

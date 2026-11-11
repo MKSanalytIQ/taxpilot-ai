@@ -1,3 +1,5 @@
+import { MAX_UPLOAD_BYTES } from "./limits";
+
 const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
 function isZipSignature(bytes: Buffer) {
@@ -36,6 +38,6 @@ export function isAllowedUpload(mime: string, size: number) {
   ].includes(mime);
   if (!ok) return { ok: false, code: "INVALID_TYPE" };
   if (size <= 0) return { ok: false, code: "EMPTY" };
-  if (size > 12 * 1024 * 1024) return { ok: false, code: "OVERSIZE" };
+  if (size > MAX_UPLOAD_BYTES) return { ok: false, code: "OVERSIZE" };
   return { ok: true, code: "" };
 }

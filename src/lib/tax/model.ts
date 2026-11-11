@@ -98,4 +98,16 @@ export type NormalizedReturn = {
     bankName?: string;
     accountType?: string;
   }>;
+  /** Income-source codes the taxpayer selected. Absence is unknown, not a denial. */
+  incomeSources?: string[];
+  /** Explicit answers. A missing key is unknown and must not be treated as false or zero. */
+  eligibilityConfirmed?: {
+    lotteryOrRacehorse?: boolean;
+    foreignAssets?: boolean;
+    unlistedShares?: boolean;
+    fnoTrading?: boolean;
+    isDirector?: boolean;
+    isLlp?: boolean;
+    agriculturalIncome?: number;
+  };
 };

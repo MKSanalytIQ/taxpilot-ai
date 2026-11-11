@@ -3,6 +3,8 @@ import bcrypt from "bcryptjs";
 import { cookies } from "next/headers";
 import { authSecretBytes } from "./production";
 import { prisma } from "./db";
+import { passwordSessionStamp } from "./session-stamp";
+import { publishSessionStamp } from "./session-revocation";
 
 const COOKIE = "tp_session";
 const TOTP_COOKIE = "tp_totp";
@@ -38,7 +40,11 @@ export async function verifyPassword(password: string, hash: string) {
 }
 
 export async function createSession(userId: string) {
-  const token = await new SignJWT({ userId })
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { passwordHash: true } });
+  if (!user) return;
+  const stamp = passwordSessionStamp(user.passwordHash);
+  await publishSessionStamp(userId, stamp);
+  const token = await new SignJWT({ userId, pwd: stamp })
     .setProtectedHeader({ alg: "HS256" })
     .setExpirationTime("12h")
     .sign(secret());
@@ -104,6 +110,7 @@ export async function getSession(): Promise<Session | null> {
     const { payload } = await jwtVerify(token, secret());
     const user = await prisma.user.findUnique({ where: { id: String(payload.userId || "") } });
     if (!user || user.status !== "ACTIVE") return null;
+    if (payload.pwd !== passwordSessionStamp(user.passwordHash)) return null;
     return { userId: user.id, email: user.email, name: user.name, role: user.role };
   } catch {
     return null;

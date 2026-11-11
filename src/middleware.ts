@@ -1,12 +1,14 @@
 import { jwtVerify } from "jose";
 import { NextRequest, NextResponse } from "next/server";
 import { authSecretBytes } from "./lib/production";
+import { sessionStampAllows } from "./lib/session-revocation";
 
 async function hasSession(token: string | undefined) {
   if (!token) return false;
   try {
     const { payload } = await jwtVerify(token, authSecretBytes());
-    return Boolean(payload.userId) && payload.purpose !== "totp" && payload.purpose !== "totp-setup";
+    if (!payload.userId || payload.purpose === "totp" || payload.purpose === "totp-setup") return false;
+    return sessionStampAllows(String(payload.userId), typeof payload.pwd === "string" ? payload.pwd : undefined);
   } catch {
     return false;
   }
